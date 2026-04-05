@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -34,6 +35,7 @@ public class ProfileService {
         UUID id = UUID.fromString(jwt.getSubject());
         return profileRepository.findById(id)
                 .map(profile -> {
+                    profile.setEmail(normalizeEmail(jwt.getClaimAsString("email")));
                     profile.setLastActiveAt(Instant.now());
                     return DtoMapper.toProfileDto(profileRepository.save(profile), null);
                 })
@@ -46,6 +48,7 @@ public class ProfileService {
                     );
                     String username = generateUniqueUsername(display);
                     Profile created = new Profile(id, display, username, null);
+                    created.setEmail(normalizeEmail(jwt.getClaimAsString("email")));
                     return DtoMapper.toProfileDto(profileRepository.save(created), null);
                 });
     }
@@ -112,6 +115,11 @@ public class ProfileService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public Optional<Profile> findById(UUID userId) {
+        return profileRepository.findById(userId);
+    }
+
     private static String readMetadataName(Jwt jwt) {
         Object meta = jwt.getClaim("user_metadata");
         if (meta instanceof Map<?, ?> map) {
@@ -145,6 +153,10 @@ public class ProfileService {
             }
         }
         return "User";
+    }
+
+    private static String normalizeEmail(String email) {
+        return email == null || email.isBlank() ? null : email.trim().toLowerCase();
     }
 
     private String generateUniqueUsername(String seed) {

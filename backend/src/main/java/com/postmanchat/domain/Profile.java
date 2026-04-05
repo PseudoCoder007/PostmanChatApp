@@ -24,6 +24,9 @@ public class Profile {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Column
+    private String email;
+
     @Column(name = "last_active_at", nullable = false)
     private Instant lastActiveAt = Instant.now();
 
@@ -80,6 +83,14 @@ public class Profile {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public Instant getLastActiveAt() {

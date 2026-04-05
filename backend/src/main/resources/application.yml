@@ -22,6 +22,17 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
 
   security:
     oauth2:
@@ -55,6 +66,10 @@ postman-chat:
     api-url: ${IGRIS_NVIDIA_API_URL:https://integrate.api.nvidia.com/v1/chat/completions}
     api-key: ${IGRIS_NVIDIA_API_KEY:}
     model: ${IGRIS_MODEL:meta/llama-3.1-70b-instruct}
+  notifications:
+    email:
+      enabled: ${EMAIL_NOTIFICATIONS_ENABLED:false}
+      from: ${EMAIL_FROM:no-reply@postmanchat.local}
 
 logging:
   level:

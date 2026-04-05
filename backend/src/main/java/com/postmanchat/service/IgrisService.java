@@ -54,6 +54,7 @@ public class IgrisService {
         try {
             String prompt = """
                     You are Igris, a witty quest designer for a gamified messaging app.
+                    The vibe should feel funny, current, and lightly Gen Z without being cringe.
                     Return only one JSON object with keys:
                     title, description, triggerType, triggerTarget, rewardXp, rewardCoins.
                     Allowed triggerType values:
@@ -86,23 +87,35 @@ public class IgrisService {
     }
 
     public String chat(String userMessage) {
+        if (isHighRiskMentalHealthMessage(userMessage)) {
+            return crisisSupportResponse();
+        }
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("Igris API key is not configured. Using fallback chat response.");
-            return fallbackChat(userMessage);
+            return supportiveFallbackChat(userMessage);
         }
         try {
             return sendChat(List.of(
                     Map.of("role", "system", "content", """
-                            You are Igris, a sharp, funny in-app AI friend for a social chat game.
-                            Be playful, concise, and PG-13.
-                            Tell jokes, roast lightly without being cruel, and encourage funny social quests.
+                            You are Igris, a supportive, funny in-app AI friend for a social chat game.
+                            Your job is to reduce loneliness, boredom, and emotional overwhelm through kind conversation.
+                            Be playful, concise, PG-13, and sound like a funny Gen Z friend.
+                            Use common current slang naturally and lightly, not every sentence.
+                            Good examples include: low-key, high-key, no cap, cooked, delulu, aura, ate, it's giving, main character, wild.
+                            Avoid sounding forced, spammy, or trying too hard.
+                            Validate feelings without sounding clinical.
+                            Offer gentle, practical suggestions like texting a trusted friend, drinking water, stepping outside, taking a short walk, journaling, resting, or doing one tiny task.
+                            If the user mentions loneliness, family drama, heartbreak, boredom, stress, or feeling down, be warm and emotionally supportive.
+                            Do not claim to diagnose, cure, or replace a therapist or doctor.
+                            Do not guilt the user or make them dependent on you.
+                            If there is any hint of self-harm, suicide, or immediate danger, tell them clearly to contact emergency help or the 988 Suicide & Crisis Lifeline right now.
                             Keep responses under 120 words.
                             """),
                     Map.of("role", "user", "content", userMessage)
             ), 220).trim();
         } catch (Exception ex) {
             log.warn("Igris chat request failed. Using fallback chat response.", ex);
-            return fallbackChat(userMessage);
+            return supportiveFallbackChat(userMessage);
         }
     }
 
@@ -195,15 +208,48 @@ public class IgrisService {
         };
     }
 
-    private static String fallbackChat(String userMessage) {
+    private static String supportiveFallbackChat(String userMessage) {
         String lowered = userMessage.toLowerCase(Locale.ROOT);
+        if (lowered.contains("depress") || lowered.contains("empty") || lowered.contains("lonely") || lowered.contains("sad")) {
+            return "That sounds really heavy, and no cap, you do not have to carry it solo. Start tiny: water, one deep breath, one message to someone safe, or one short walk. If you want, I can stay here and help you make the next 10 minutes feel less cooked.";
+        }
+        if (lowered.contains("family") || lowered.contains("trauma") || lowered.contains("parents")) {
+            return "Family stuff can be genuinely exhausting, and it is not you being dramatic. Low-key, protecting your peace counts. If you want, tell me what happened and I can help you sort the mess into what hurt, what you can control, and what boundary might help.";
+        }
+        if (lowered.contains("bored") || lowered.contains("alone")) {
+            return "Say less, we can beat the boredom. Pick one lane: chaotic joke mode, weird DM opener mode, mini quest mode, or soft reset mode. Your vibe is not doomed, it just needs a plot twist.";
+        }
         if (lowered.contains("joke")) {
-            return "Igris reporting: I told my group chat I needed space. They made a new room and invited me twice.";
+            return "Low-key tragic: I told my group chat I needed space, and they made a new room just to drag me back in. No cap, the chaos had aura.";
         }
         if (lowered.contains("quest")) {
-            return "Igris has a quest: send a friend a wildly overdramatic hello like you just returned from battle.";
+            return "Igris quest drop: DM a friend an absurdly overdramatic hello like you just survived a boss fight. If they reply with confusion, you ate.";
         }
-        return "Igris online. I can crack jokes, throw you a ridiculous quest, or judge your room names with theatrical disappointment.";
+        if (lowered.contains("roast") || lowered.contains("judge")) {
+            return "Respectfully, some of these room names are giving sleep mode. I can help you cook up something less mid.";
+        }
+        return "Igris online. I can crack jokes, hand out chaotic quests, or rate your room ideas without being fully delulu.";
+    }
+
+    private static boolean isHighRiskMentalHealthMessage(String userMessage) {
+        String lowered = userMessage == null ? "" : userMessage.toLowerCase(Locale.ROOT);
+        return lowered.contains("kill myself")
+                || lowered.contains("end my life")
+                || lowered.contains("want to die")
+                || lowered.contains("suicide")
+                || lowered.contains("self harm")
+                || lowered.contains("hurt myself")
+                || lowered.contains("don't want to live")
+                || lowered.contains("i am going to die");
+    }
+
+    private static String crisisSupportResponse() {
+        return """
+                I'm really glad you said something. This sounds serious, and I need to be direct: please contact emergency help or the 988 Suicide & Crisis Lifeline right now.
+                In the U.S. or Canada, call or text 988 now. If you might act on this soon, call 911 or go to the nearest emergency room.
+                If you can, text or call one trusted person and say: "I'm not safe being alone right now."
+                Stay with another person if possible. No cap, this is the moment to get human support immediately.
+                """.strip();
     }
 
     private static int clamp(int value, int min, int max) {

@@ -13,6 +13,7 @@ Postman Quest Chat is a realtime social messaging app built with React, Spring B
 - Supabase Storage uploads for images, videos, and documents
 - 50 MB upload warning and server-side validation
 - In-app notifications for inactive recipients plus browser notifications
+- Optional SMTP email notifications for inactive recipients
 - Presence indicator based on recent activity heartbeat and periodic refresh
 - Toast-based success and failure feedback across auth and chat actions
 - Optional UI sounds for sends, alerts, and live activity
@@ -21,7 +22,7 @@ Postman Quest Chat is a realtime social messaging app built with React, Spring B
 ## Tech stack
 
 - Frontend: React 18, TypeScript, Vite, TanStack Query, Motion, Sonner
-- Backend: Spring Boot 3, Java 21, Spring Security, STOMP WebSocket
+- Backend: Spring Boot 3, Java 21, Spring Security, STOMP WebSocket, JavaMail
 - Auth and database: Supabase Auth, Supabase Postgres
 - File storage: Supabase Storage
 - Migrations: Flyway
@@ -94,6 +95,7 @@ The frontend uses Supabase Auth for sign up and sign in. After login, the browse
 
 - In-app notifications for unread activity
 - Browser notifications when the tab is backgrounded and permission is granted
+- Optional SMTP email notifications for inactive recipients
 - Toast notifications for successful and failed actions
 
 ## Project structure
@@ -127,6 +129,14 @@ SERVER_PORT=8080
 IGRIS_NVIDIA_API_URL=https://integrate.api.nvidia.com/v1/chat/completions
 IGRIS_NVIDIA_API_KEY=
 IGRIS_MODEL=meta/llama-3.1-70b-instruct
+EMAIL_NOTIFICATIONS_ENABLED=false
+EMAIL_FROM=no-reply@your-app.example
+MAIL_HOST=
+MAIL_PORT=587
+MAIL_USERNAME=
+MAIL_PASSWORD=
+MAIL_SMTP_AUTH=true
+MAIL_SMTP_STARTTLS=true
 ```
 
 Example file: [backend/env.example](C:/Users/alisa/PostWebAppforMessaging/backend/env.example)
@@ -278,8 +288,8 @@ npm run build
 - Browser notifications require notification permission.
 - Direct chat requires accepted friendship.
 - Uploads larger than 50 MB are rejected.
-- The current notification system is in-app plus browser background notifications, not full push delivery to fully offline devices.
-- Email notifications are not implemented in the backend yet.
+- The current notification system supports in-app notifications, browser background notifications, and optional SMTP email notifications for inactive recipients.
+- Email delivery requires valid SMTP env vars and `EMAIL_NOTIFICATIONS_ENABLED=true`.
 - Igris chat requires authentication and unlocks only after the user reaches 5 coins.
 
 ## Security notes

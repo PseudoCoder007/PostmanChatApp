@@ -15,14 +15,23 @@ import java.util.UUID;
 public class NotificationService {
 
     private final AppNotificationRepository notificationRepository;
+    private final ProfileService profileService;
+    private final EmailNotificationService emailNotificationService;
 
-    public NotificationService(AppNotificationRepository notificationRepository) {
+    public NotificationService(
+            AppNotificationRepository notificationRepository,
+            ProfileService profileService,
+            EmailNotificationService emailNotificationService
+    ) {
         this.notificationRepository = notificationRepository;
+        this.profileService = profileService;
+        this.emailNotificationService = emailNotificationService;
     }
 
     @Transactional
     public void notifyUser(UUID userId, String type, String title, String body, UUID roomId, UUID messageId) {
         notificationRepository.save(new AppNotification(UUID.randomUUID(), userId, type, title, body, roomId, messageId));
+        profileService.findById(userId).ifPresent(profile -> emailNotificationService.sendNotificationEmail(profile, title, body));
     }
 
     @Transactional(readOnly = true)
