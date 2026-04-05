@@ -53,6 +53,10 @@ export interface Quest {
   rewardXp: number;
   rewardCoins: number;
   status: 'assigned' | 'completed';
+  triggerType: 'SEND_DIRECT_MESSAGE' | 'SEND_GROUP_MESSAGE' | 'CREATE_GROUP_ROOM' | 'UPLOAD_IMAGE' | 'UPLOAD_DOCUMENT';
+  triggerTarget: string | null;
+  autoCompletes: boolean;
+  source: string;
   assignedAt: string;
   completedAt: string | null;
 }
@@ -85,4 +89,8 @@ export interface NotificationItem {
 export interface WsMessagePayload {
   type: 'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED';
   message: Message;
+}
+
+export interface IgrisChatResponse {
+  reply: string;
 }

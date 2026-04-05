@@ -116,6 +116,9 @@ DB_PASSWORD=<your_database_password>
 SUPABASE_JWT_ISSUER=https://<your-ref>.supabase.co/auth/v1
 CORS_ORIGINS=http://localhost:5173
 SERVER_PORT=8080
+IGRIS_NVIDIA_API_URL=https://integrate.api.nvidia.com/v1/chat/completions
+IGRIS_NVIDIA_API_KEY=
+IGRIS_MODEL=meta/llama-3.1-70b-instruct
 ```
 
 Example file: [backend/env.example](C:/Users/alisa/PostWebAppforMessaging/backend/env.example)

@@ -33,6 +33,27 @@ public class UserQuest {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "custom_title")
+    private String customTitle;
+
+    @Column(name = "custom_description")
+    private String customDescription;
+
+    @Column(name = "reward_xp_override")
+    private Integer rewardXpOverride;
+
+    @Column(name = "reward_coins_override")
+    private Integer rewardCoinsOverride;
+
+    @Column(name = "trigger_type")
+    private String triggerType;
+
+    @Column(name = "trigger_target")
+    private String triggerTarget;
+
+    @Column(nullable = false)
+    private String source = "template";
+
     protected UserQuest() {
     }
 
@@ -74,5 +95,61 @@ public class UserQuest {
 
     public void setCompletedAt(Instant completedAt) {
         this.completedAt = completedAt;
+    }
+
+    public String getCustomTitle() {
+        return customTitle;
+    }
+
+    public void setCustomTitle(String customTitle) {
+        this.customTitle = customTitle;
+    }
+
+    public String getCustomDescription() {
+        return customDescription;
+    }
+
+    public void setCustomDescription(String customDescription) {
+        this.customDescription = customDescription;
+    }
+
+    public Integer getRewardXpOverride() {
+        return rewardXpOverride;
+    }
+
+    public void setRewardXpOverride(Integer rewardXpOverride) {
+        this.rewardXpOverride = rewardXpOverride;
+    }
+
+    public Integer getRewardCoinsOverride() {
+        return rewardCoinsOverride;
+    }
+
+    public void setRewardCoinsOverride(Integer rewardCoinsOverride) {
+        this.rewardCoinsOverride = rewardCoinsOverride;
+    }
+
+    public String getTriggerType() {
+        return triggerType;
+    }
+
+    public void setTriggerType(String triggerType) {
+        this.triggerType = triggerType;
+    }
+
+    public String getTriggerTarget() {
+        return triggerTarget;
+    }
+
+    public void setTriggerTarget(String triggerTarget) {
+        this.triggerTarget = triggerTarget;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 }

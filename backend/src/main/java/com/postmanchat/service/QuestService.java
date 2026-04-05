@@ -1,7 +1,11 @@
 package com.postmanchat.service;
 
 import com.postmanchat.domain.Profile;
+import com.postmanchat.domain.QuestTriggerType;
+import com.postmanchat.domain.Room;
+import com.postmanchat.domain.RoomType;
 import com.postmanchat.domain.QuestTemplate;
+import com.postmanchat.domain.Attachment;
 import com.postmanchat.domain.UserQuest;
 import com.postmanchat.domain.UserQuestStatus;
 import com.postmanchat.repo.ProfileRepository;
@@ -25,19 +29,22 @@ public class QuestService {
     private final ProfileRepository profileRepository;
     private final ProgressionService progressionService;
     private final FriendService friendService;
+    private final IgrisService igrisService;
 
     public QuestService(
             UserQuestRepository userQuestRepository,
             QuestTemplateRepository questTemplateRepository,
             ProfileRepository profileRepository,
             ProgressionService progressionService,
-            FriendService friendService
+            FriendService friendService,
+            IgrisService igrisService
     ) {
         this.userQuestRepository = userQuestRepository;
         this.questTemplateRepository = questTemplateRepository;
         this.profileRepository = profileRepository;
         this.progressionService = progressionService;
         this.friendService = friendService;
+        this.igrisService = igrisService;
     }
 
     @Transactional(readOnly = true)
@@ -56,12 +63,7 @@ public class QuestService {
         if (userQuestRepository.countByUserIdAndStatus(userId, UserQuestStatus.assigned) >= 3) {
             throw new IllegalArgumentException("Finish one of your current quests before generating another");
         }
-        QuestTemplate template = questTemplateRepository.findActiveTemplates().stream()
-                .filter(candidate -> candidate.getMinLevel() <= profile.getLevel())
-                .filter(candidate -> !userQuestRepository.existsByUserIdAndTemplateIdAndStatus(userId, candidate.getId(), UserQuestStatus.assigned))
-                .min(Comparator.comparing(QuestTemplate::getTitle))
-                .orElseThrow(() -> new IllegalArgumentException("No quest available right now"));
-        UserQuest quest = new UserQuest(UUID.randomUUID(), userId, template.getId());
+        UserQuest quest = buildIgrisQuest(userId);
         return toDto(userQuestRepository.save(quest));
     }
 
@@ -78,12 +80,11 @@ public class QuestService {
         }
         Profile target = profileRepository.findById(targetUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Friend not found"));
-        QuestTemplate template = questTemplateRepository.findActiveTemplates().stream()
-                .filter(candidate -> candidate.getMinLevel() <= target.getLevel())
-                .filter(candidate -> !userQuestRepository.existsByUserIdAndTemplateIdAndStatus(targetUserId, candidate.getId(), UserQuestStatus.assigned))
-                .min(Comparator.comparing(QuestTemplate::getTitle))
-                .orElseThrow(() -> new IllegalArgumentException("No quest available for this friend"));
-        UserQuest quest = new UserQuest(UUID.randomUUID(), targetUserId, template.getId());
+        if (userQuestRepository.countByUserIdAndStatus(targetUserId, UserQuestStatus.assigned) >= 3) {
+            throw new IllegalArgumentException("Your friend already has enough active quests");
+        }
+        UserQuest quest = buildIgrisQuest(targetUserId);
+        quest.setSource("friend_challenge");
         return toDto(userQuestRepository.save(quest));
     }
 
@@ -95,30 +96,150 @@ public class QuestService {
         if (quest.getStatus() == UserQuestStatus.completed) {
             throw new IllegalArgumentException("Quest already completed");
         }
-        QuestTemplate template = questTemplateRepository.findById(quest.getTemplateId())
-                .orElseThrow(() -> new IllegalArgumentException("Quest template not found"));
         quest.setStatus(UserQuestStatus.completed);
         quest.setCompletedAt(Instant.now());
         Profile profile = profileRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
-        progressionService.grantRewards(profile, template.getRewardXp(), template.getRewardCoins());
+        progressionService.grantRewards(profile, rewardXp(quest), rewardCoins(quest));
         profileRepository.save(profile);
         return toDto(userQuestRepository.save(quest));
     }
 
+    @Transactional
+    public void handleMessageActivity(UUID userId, Room room, String content, Attachment attachment) {
+        Profile profile = profileRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
+        List<UserQuest> quests = userQuestRepository.findByUserIdOrderByAssignedAtDesc(userId).stream()
+                .filter(quest -> quest.getStatus() == UserQuestStatus.assigned)
+                .toList();
+        for (UserQuest quest : quests) {
+            QuestTriggerType triggerType = resolveTriggerType(quest);
+            if (triggerType == QuestTriggerType.SEND_DIRECT_MESSAGE && room.getType() == RoomType.direct && !content.isBlank()) {
+                completeAutomatically(profile, quest);
+            }
+            if (triggerType == QuestTriggerType.SEND_GROUP_MESSAGE && room.getType() == RoomType.group && !content.isBlank()) {
+                completeAutomatically(profile, quest);
+            }
+            if (attachment != null && triggerType == QuestTriggerType.UPLOAD_IMAGE && attachment.getContentType().startsWith("image/")) {
+                completeAutomatically(profile, quest);
+            }
+            if (attachment != null && triggerType == QuestTriggerType.UPLOAD_DOCUMENT && isDocument(attachment.getContentType(), attachment.getOriginalName())) {
+                completeAutomatically(profile, quest);
+            }
+        }
+    }
+
+    @Transactional
+    public void handleGroupRoomCreated(UUID userId) {
+        Profile profile = profileRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
+        userQuestRepository.findByUserIdOrderByAssignedAtDesc(userId).stream()
+                .filter(quest -> quest.getStatus() == UserQuestStatus.assigned)
+                .filter(quest -> resolveTriggerType(quest) == QuestTriggerType.CREATE_GROUP_ROOM)
+                .findFirst()
+                .ifPresent(quest -> completeAutomatically(profile, quest));
+    }
+
     private QuestDto toDto(UserQuest quest) {
-        QuestTemplate template = questTemplateRepository.findById(quest.getTemplateId())
-                .orElseThrow(() -> new IllegalArgumentException("Quest template not found"));
+        QuestTemplate template = quest.getTemplateId() != null
+                ? questTemplateRepository.findById(quest.getTemplateId()).orElse(null)
+                : null;
+        String code = template != null ? template.getCode() : "igris_" + quest.getId();
+        String title = quest.getCustomTitle() != null ? quest.getCustomTitle() : template != null ? template.getTitle() : "Quest";
+        String description = quest.getCustomDescription() != null ? quest.getCustomDescription() : template != null ? template.getDescription() : "";
         return new QuestDto(
                 quest.getId(),
-                template.getCode(),
-                template.getTitle(),
-                template.getDescription(),
-                template.getRewardXp(),
-                template.getRewardCoins(),
+                code,
+                title,
+                description,
+                rewardXp(quest),
+                rewardCoins(quest),
                 quest.getStatus().name(),
+                resolveTriggerType(quest).name(),
+                quest.getTriggerTarget(),
+                true,
+                quest.getSource(),
                 quest.getAssignedAt(),
                 quest.getCompletedAt()
         );
+    }
+
+    private UserQuest buildIgrisQuest(UUID userId) {
+        IgrisService.IgrisQuestIdea idea = igrisService.generateQuestIdea();
+        UserQuest quest = new UserQuest(UUID.randomUUID(), userId, null);
+        quest.setCustomTitle(idea.title());
+        quest.setCustomDescription(idea.description());
+        quest.setRewardXpOverride(idea.rewardXp());
+        quest.setRewardCoinsOverride(idea.rewardCoins());
+        quest.setTriggerType(idea.triggerType().name());
+        quest.setTriggerTarget(idea.triggerTarget());
+        quest.setSource("igris");
+        return quest;
+    }
+
+    private int rewardXp(UserQuest quest) {
+        if (quest.getRewardXpOverride() != null) {
+            return quest.getRewardXpOverride();
+        }
+        return questTemplateRepository.findById(quest.getTemplateId())
+                .map(QuestTemplate::getRewardXp)
+                .orElse(20);
+    }
+
+    private int rewardCoins(UserQuest quest) {
+        if (quest.getRewardCoinsOverride() != null) {
+            return quest.getRewardCoinsOverride();
+        }
+        return questTemplateRepository.findById(quest.getTemplateId())
+                .map(QuestTemplate::getRewardCoins)
+                .orElse(2);
+    }
+
+    private QuestTriggerType resolveTriggerType(UserQuest quest) {
+        if (quest.getTriggerType() != null && !quest.getTriggerType().isBlank()) {
+            return QuestTriggerType.valueOf(quest.getTriggerType());
+        }
+        QuestTemplate template = questTemplateRepository.findById(quest.getTemplateId())
+                .orElseThrow(() -> new IllegalArgumentException("Quest template not found"));
+        return mapTemplateTrigger(template.getCode());
+    }
+
+    private static QuestTriggerType mapTemplateTrigger(String code) {
+        return switch (code) {
+            case "compliment_friend", "daily_check_in", "challenge_friend" -> QuestTriggerType.SEND_DIRECT_MESSAGE;
+            case "group_starter" -> QuestTriggerType.SEND_GROUP_MESSAGE;
+            default -> QuestTriggerType.SEND_GROUP_MESSAGE;
+        };
+    }
+
+    private void completeAutomatically(Profile profile, UserQuest quest) {
+        if (quest.getStatus() == UserQuestStatus.completed) {
+            return;
+        }
+        quest.setStatus(UserQuestStatus.completed);
+        quest.setCompletedAt(Instant.now());
+        progressionService.grantRewards(profile, rewardXp(quest), rewardCoins(quest));
+        profileRepository.save(profile);
+        userQuestRepository.save(quest);
+    }
+
+    private static boolean isDocument(String contentType, String originalName) {
+        if (contentType == null) {
+            return hasDocumentExtension(originalName);
+        }
+        String normalized = contentType.toLowerCase();
+        return normalized.startsWith("application/")
+                || normalized.startsWith("text/")
+                || hasDocumentExtension(originalName);
+    }
+
+    private static boolean hasDocumentExtension(String originalName) {
+        if (originalName == null) {
+            return false;
+        }
+        String lower = originalName.toLowerCase();
+        return lower.endsWith(".pdf") || lower.endsWith(".doc") || lower.endsWith(".docx")
+                || lower.endsWith(".txt") || lower.endsWith(".ppt") || lower.endsWith(".pptx")
+                || lower.endsWith(".xls") || lower.endsWith(".xlsx") || lower.endsWith(".zip");
     }
 }

@@ -11,6 +11,10 @@ public record QuestDto(
         int rewardXp,
         int rewardCoins,
         String status,
+        String triggerType,
+        String triggerTarget,
+        boolean autoCompletes,
+        String source,
         Instant assignedAt,
         Instant completedAt
 ) {

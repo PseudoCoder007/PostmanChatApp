@@ -2,11 +2,7 @@ package com.postmanchat.web;
 
 import com.postmanchat.service.QuestService;
 import com.postmanchat.web.dto.QuestDto;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +27,7 @@ public class QuestController {
         return questService.assignRandomQuest();
     }
 
+    @Deprecated
     @PostMapping("/{questId}/complete")
     public QuestDto completeQuest(@PathVariable UUID questId) {
         return questService.completeQuest(questId);

@@ -4,6 +4,7 @@ import com.postmanchat.config.PostmanChatProperties;
 import com.postmanchat.domain.Attachment;
 import com.postmanchat.domain.Message;
 import com.postmanchat.domain.Profile;
+import com.postmanchat.domain.Room;
 import com.postmanchat.repo.MessageRepository;
 import com.postmanchat.repo.ProfileRepository;
 import com.postmanchat.web.Authz;
@@ -40,6 +41,7 @@ public class MessageService {
     private final AttachmentService attachmentService;
     private final NotificationService notificationService;
     private final com.postmanchat.repo.RoomMemberRepository roomMemberRepository;
+    private final QuestService questService;
 
     public MessageService(
             MessageRepository messageRepository,
@@ -50,7 +52,8 @@ public class MessageService {
             ProgressionService progressionService,
             AttachmentService attachmentService,
             NotificationService notificationService,
-            com.postmanchat.repo.RoomMemberRepository roomMemberRepository
+            com.postmanchat.repo.RoomMemberRepository roomMemberRepository,
+            QuestService questService
     ) {
         this.messageRepository = messageRepository;
         this.profileRepository = profileRepository;
@@ -61,6 +64,7 @@ public class MessageService {
         this.attachmentService = attachmentService;
         this.notificationService = notificationService;
         this.roomMemberRepository = roomMemberRepository;
+        this.questService = questService;
     }
 
     @Transactional(readOnly = true)
@@ -99,6 +103,8 @@ public class MessageService {
             progressionService.grantRewards(profile, 5, 1);
             profileRepository.save(profile);
         });
+        Room room = roomService.findRoom(roomId);
+        questService.handleMessageActivity(userId, room, body, attachment);
         MessageDto dto = toMessageDto(saved);
         createNotificationsForInactiveMembers(saved, dto);
         messagingTemplate.convertAndSend(topic(roomId), new WsMessagePayload("MESSAGE_CREATED", dto));

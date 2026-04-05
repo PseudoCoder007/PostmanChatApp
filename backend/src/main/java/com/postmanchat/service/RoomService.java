@@ -28,19 +28,25 @@ public class RoomService {
     private final ProfileRepository profileRepository;
     private final ProfileService profileService;
     private final FriendService friendService;
+    private final ProgressionService progressionService;
+    private final QuestService questService;
 
     public RoomService(
             RoomRepository roomRepository,
             RoomMemberRepository roomMemberRepository,
             ProfileRepository profileRepository,
             ProfileService profileService,
-            FriendService friendService
+            FriendService friendService,
+            ProgressionService progressionService,
+            QuestService questService
     ) {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
         this.profileRepository = profileRepository;
         this.profileService = profileService;
         this.friendService = friendService;
+        this.progressionService = progressionService;
+        this.questService = questService;
     }
 
     @Transactional(readOnly = true)
@@ -72,9 +78,17 @@ public class RoomService {
         if (roomRepository.existsGroupByNameIgnoreCase(name)) {
             throw new IllegalArgumentException("Room name already exists");
         }
+        var profile = profileRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
+        if (profile.getCoins() < 20) {
+            throw new IllegalArgumentException("Creating a group room costs 20 coins");
+        }
+        progressionService.spendCoins(profile, 20);
+        profileRepository.save(profile);
         Room room = new Room(UUID.randomUUID(), name, type, userId);
         roomRepository.save(room);
         roomMemberRepository.save(new RoomMember(new RoomMemberId(room.getId(), userId), "owner"));
+        questService.handleGroupRoomCreated(userId);
         return toRoomDto(room, userId);
     }
 
@@ -83,6 +97,12 @@ public class RoomService {
         if (!roomMemberRepository.existsByIdRoomIdAndIdUserId(roomId, userId)) {
             throw new AccessDeniedException("Not a member of this room");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Room findRoom(UUID roomId) {
+        return roomRepository.findById(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("Room not found"));
     }
 
     private RoomDto createDirectRoom(UUID userId, UUID targetUserId) {

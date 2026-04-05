@@ -14,6 +14,14 @@ public class ProgressionService {
         profile.setTitle(resolveTitle(level));
     }
 
+    public void spendCoins(Profile profile, int coins) {
+        int cost = Math.max(0, coins);
+        if (profile.getCoins() < cost) {
+            throw new IllegalArgumentException("Not enough coins");
+        }
+        profile.setCoins(profile.getCoins() - cost);
+    }
+
     private static String resolveTitle(int level) {
         if (level >= 30) {
             return "Legend";
