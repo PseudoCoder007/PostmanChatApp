@@ -15,6 +15,7 @@ export interface Profile {
   title: string;
   profilePhotoUnlocked: boolean;
   canChallengeFriends: boolean;
+  canUseIgris: boolean;
 }
 
 export interface Room {

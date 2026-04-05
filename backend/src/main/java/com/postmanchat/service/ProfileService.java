@@ -102,6 +102,16 @@ public class ProfileService {
         });
     }
 
+    @Transactional(readOnly = true)
+    public void assertIgrisUnlocked() {
+        UUID userId = Authz.requireUserId();
+        Profile profile = profileRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
+        if (profile.getCoins() < 5) {
+            throw new IllegalArgumentException("Igris unlock requires 5 coins");
+        }
+    }
+
     private static String readMetadataName(Jwt jwt) {
         Object meta = jwt.getClaim("user_metadata");
         if (meta instanceof Map<?, ?> map) {

@@ -17,6 +17,7 @@ public record ProfileDto(
         int level,
         String title,
         boolean profilePhotoUnlocked,
-        boolean canChallengeFriends
+        boolean canChallengeFriends,
+        boolean canUseIgris
 ) {
 }

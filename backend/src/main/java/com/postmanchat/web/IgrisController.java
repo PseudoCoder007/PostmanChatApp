@@ -1,6 +1,7 @@
 package com.postmanchat.web;
 
 import com.postmanchat.service.IgrisService;
+import com.postmanchat.service.ProfileService;
 import com.postmanchat.web.dto.IgrisChatRequest;
 import com.postmanchat.web.dto.IgrisChatResponse;
 import jakarta.validation.Valid;
@@ -14,13 +15,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class IgrisController {
 
     private final IgrisService igrisService;
+    private final ProfileService profileService;
 
-    public IgrisController(IgrisService igrisService) {
+    public IgrisController(IgrisService igrisService, ProfileService profileService) {
         this.igrisService = igrisService;
+        this.profileService = profileService;
     }
 
     @PostMapping("/chat")
     public IgrisChatResponse chat(@Valid @RequestBody IgrisChatRequest request) {
+        profileService.assertIgrisUnlocked();
         return new IgrisChatResponse(igrisService.chat(request.message()));
     }
 }

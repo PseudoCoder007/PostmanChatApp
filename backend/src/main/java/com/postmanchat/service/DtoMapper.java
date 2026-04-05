@@ -31,7 +31,8 @@ public final class DtoMapper {
                 p.getLevel(),
                 p.getTitle(),
                 p.getCoins() >= 5,
-                p.getCoins() >= 10
+                p.getCoins() >= 10,
+                p.getCoins() >= 5
         );
     }
 

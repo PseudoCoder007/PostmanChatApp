@@ -1,23 +1,26 @@
 # Postman Quest Chat
 
-Postman Quest Chat is a realtime social messaging app built with React, Spring Boot, and Supabase. It combines room chat, friend-gated direct messaging, quests, coins, levels, notifications, and leaderboard features in a single app.
+Postman Quest Chat is a realtime social messaging app built with React, Spring Boot, and Supabase. It combines room chat, friend-gated direct messaging, quests, coins, levels, notifications, leaderboard features, and an unlockable Igris AI console in a single app.
 
 ## Highlights
 
 - Realtime messaging over WebSockets
+- Animated command-deck UI with route transitions and gaming-style panel motion
 - Group rooms with unique names
 - Direct messaging only after friend request acceptance
 - Search for people and rooms
 - Unique usernames and editable profiles
 - Supabase Storage uploads for images, videos, and documents
 - 50 MB upload warning and server-side validation
-- In-app notifications for inactive recipients
-- Presence indicator based on recent activity heartbeat
-- XP, coins, levels, titles, random quests, friend quests, and global leaderboard
+- In-app notifications for inactive recipients plus browser notifications
+- Presence indicator based on recent activity heartbeat and periodic refresh
+- Toast-based success and failure feedback across auth and chat actions
+- Optional UI sounds for sends, alerts, and live activity
+- XP, coins, levels, titles, random quests, friend quests, Igris unlocks, and global leaderboard
 
 ## Tech stack
 
-- Frontend: React 18, TypeScript, Vite, TanStack Query
+- Frontend: React 18, TypeScript, Vite, TanStack Query, Motion, Sonner
 - Backend: Spring Boot 3, Java 21, Spring Security, STOMP WebSocket
 - Auth and database: Supabase Auth, Supabase Postgres
 - File storage: Supabase Storage
@@ -42,13 +45,14 @@ The frontend uses Supabase Auth for sign up and sign in. After login, the browse
 - Users can send and accept friend requests.
 - Presence is updated through a heartbeat endpoint while the app is open.
 - Notifications are stored server-side and shown in the UI.
+- Friend and profile presence are refreshed periodically on the frontend.
 
 ### Gamification
 
 - Sending messages grants small XP and coin rewards.
 - Users can generate random quests.
 - Completing quests grants larger rewards.
-- Coins unlock profile photo usage and friend quest sending.
+- Coins unlock profile photo usage, Igris access, and friend quest sending.
 - Global leaderboard ranks users by XP.
 
 ### Attachments
@@ -66,6 +70,8 @@ The frontend uses Supabase Auth for sign up and sign in. After login, the browse
 - Friend-only direct messages
 - Message history loading
 - Live updates without refresh
+- Optional game-style UI sounds for sends and incoming activity
+- Animated chat surfaces and room switching
 
 ### Profiles and friends
 
@@ -80,6 +86,7 @@ The frontend uses Supabase Auth for sign up and sign in. After login, the browse
 
 - XP, coins, levels, titles
 - Random quests
+- Igris-generated quests and AI chat console
 - Friend challenge quests
 - Global leaderboard
 
@@ -87,6 +94,7 @@ The frontend uses Supabase Auth for sign up and sign in. After login, the browse
 
 - In-app notifications for unread activity
 - Browser notifications when the tab is backgrounded and permission is granted
+- Toast notifications for successful and failed actions
 
 ## Project structure
 
@@ -227,7 +235,9 @@ npm run build
 ## Current unlock rules
 
 - 5 coins: profile photo unlock
+- 5 coins: Igris AI console unlock
 - 10 coins: friend quest sending unlock
+- 20 coins: group room creation cost
 
 ## API summary
 
@@ -261,6 +271,7 @@ npm run build
 - `POST /api/attachments/register`
 - `GET /api/notifications`
 - `POST /api/notifications/{notificationId}/read`
+- `POST /api/igris/chat`
 
 ## Notes
 
@@ -268,6 +279,8 @@ npm run build
 - Direct chat requires accepted friendship.
 - Uploads larger than 50 MB are rejected.
 - The current notification system is in-app plus browser background notifications, not full push delivery to fully offline devices.
+- Email notifications are not implemented in the backend yet.
+- Igris chat requires authentication and unlocks only after the user reaches 5 coins.
 
 ## Security notes
 
