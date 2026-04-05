@@ -1,0 +1,249 @@
+:root {
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  line-height: 1.5;
+  color: #f8fafc;
+  background:
+    radial-gradient(circle at top left, rgb(255 166 0 / 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgb(34 211 238 / 0.18), transparent 24%),
+    linear-gradient(135deg, #09111f 0%, #11203d 52%, #1d1340 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: transparent;
+}
+
+a {
+  color: #7dd3fc;
+}
+
+input,
+button,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.card {
+  background: rgb(9 18 34 / 0.78);
+  border: 1px solid rgb(148 163 184 / 0.18);
+  border-radius: 18px;
+  padding: 1.25rem;
+  box-shadow: 0 18px 45px rgb(2 8 23 / 0.35);
+  backdrop-filter: blur(18px);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  background: linear-gradient(135deg, #fb7185 0%, #f59e0b 100%);
+  color: #09111f;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgb(251 113 133 / 0.3);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.field input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.error {
+  color: #fecaca;
+  font-size: 0.9rem;
+}
+
+.chat-layout {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 1rem;
+  min-height: 70vh;
+}
+
+@media (max-width: 700px) {
+  .chat-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.room-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.room-list button {
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgb(148 163 184 / 0.14);
+  border-radius: 14px;
+  margin-bottom: 0.35rem;
+  background: rgb(15 23 42 / 0.82);
+  color: #f8fafc;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.room-list button.active {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, rgb(251 113 133 / 0.22), rgb(245 158 11 / 0.22));
+}
+
+.messages {
+  border: 1px solid rgb(148 163 184 / 0.18);
+  border-radius: 18px;
+  padding: 0.75rem;
+  max-height: 58vh;
+  overflow-y: auto;
+  background: rgb(6 14 27 / 0.74);
+}
+
+.message {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgb(148 163 184 / 0.12);
+  font-size: 0.95rem;
+}
+
+.message-meta {
+  font-size: 0.75rem;
+  color: #cbd5e1;
+}
+
+.room-caption {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.chat-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgb(148 163 184 / 0.24);
+  border-radius: 12px;
+  background: rgb(15 23 42 / 0.84);
+  color: #f8fafc;
+}
+
+.search-result {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.35rem 0;
+}
+
+.gamify-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #fde68a;
+}
+
+.gamify-strip span {
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  background: rgb(245 158 11 / 0.18);
+  border: 1px solid rgb(245 158 11 / 0.24);
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 0.5rem;
+  border-radius: 14px;
+  border: 1px solid rgb(148 163 184 / 0.24);
+  background: rgb(15 23 42 / 0.84);
+  color: #f8fafc;
+}
+
+.game-shell {
+  padding-bottom: 1rem;
+}
+
+.hero-bar {
+  padding: 1rem 0 0.25rem;
+}
+
+.hero-subtitle {
+  margin: 0.35rem 0 0;
+  color: #cbd5e1;
+}
+
+.glossy-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.glossy-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.08), transparent 42%);
+  pointer-events: none;
+}
+
+.attachment-preview {
+  max-width: 100%;
+  max-height: 280px;
+  border-radius: 14px;
+  margin-top: 0.5rem;
+  border: 1px solid rgb(148 163 184 / 0.18);
+}
+
+.attachment-link {
+  display: inline-block;
+  margin-top: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  background: rgb(56 189 248 / 0.14);
+  border: 1px solid rgb(56 189 248 / 0.2);
+}

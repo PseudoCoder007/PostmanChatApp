@@ -1,0 +1,59 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  config:
+    import: optional:file:./.env[.properties],optional:file:./backend/.env[.properties]
+  application:
+    name: postman-chat-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://127.0.0.1:54322/postgres?sslmode=disable}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SUPABASE_JWT_ISSUER:https://YOUR_PROJECT_REF.supabase.co/auth/v1}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+
+resilience4j:
+  ratelimiter:
+    instances:
+      sendMessage:
+        limit-for-period: 60
+        limit-refresh-period: 1m
+        timeout-duration: 0s
+
+postman-chat:
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  messages:
+    max-content-length: 8000
+
+logging:
+  level:
+    root: INFO
+    com.postmanchat: INFO
+    org.springframework.web.socket: INFO
