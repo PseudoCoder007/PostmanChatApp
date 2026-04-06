@@ -42,6 +42,15 @@ public class Profile {
     @Column(nullable = false)
     private String title = "Newbie";
 
+    @Column(name = "profile_photo_unlocked", nullable = false)
+    private boolean profilePhotoUnlocked = false;
+
+    @Column(name = "friend_quests_unlocked", nullable = false)
+    private boolean friendQuestsUnlocked = false;
+
+    @Column(name = "igris_unlocked", nullable = false)
+    private boolean igrisUnlocked = false;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -135,5 +144,29 @@ public class Profile {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public boolean isProfilePhotoUnlocked() {
+        return profilePhotoUnlocked;
+    }
+
+    public void setProfilePhotoUnlocked(boolean profilePhotoUnlocked) {
+        this.profilePhotoUnlocked = profilePhotoUnlocked;
+    }
+
+    public boolean isFriendQuestsUnlocked() {
+        return friendQuestsUnlocked;
+    }
+
+    public void setFriendQuestsUnlocked(boolean friendQuestsUnlocked) {
+        this.friendQuestsUnlocked = friendQuestsUnlocked;
+    }
+
+    public boolean isIgrisUnlocked() {
+        return igrisUnlocked;
+    }
+
+    public void setIgrisUnlocked(boolean igrisUnlocked) {
+        this.igrisUnlocked = igrisUnlocked;
     }
 }

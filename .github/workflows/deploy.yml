@@ -1,0 +1,54 @@
+name: Deploy to AWS App Runner
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push Docker image
+      id: build
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Deploy to App Runner
+      uses: awslabs/amazon-app-runner-deploy@main
+      with:
+        service: postman-chat
+        image: ${{ steps.build.outputs.image }}
+        port: 8080
+        region: ${{ secrets.AWS_REGION }}
+        cpu: 1
+        memory: 2
+        wait-for-service-stability: true
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        DB_USERNAME: ${{ secrets.DB_USERNAME }}
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        SUPABASE_JWT_ISSUER: ${{ secrets.SUPABASE_JWT_ISSUER }}
+        CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+        STORAGE_BASE_URL: ${{ secrets.STORAGE_BASE_URL }}
+        IGRIS_NVIDIA_API_KEY: ${{ secrets.IGRIS_NVIDIA_API_KEY }}

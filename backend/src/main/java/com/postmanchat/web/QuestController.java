@@ -17,12 +17,12 @@ public class QuestController {
         this.questService = questService;
     }
 
-    @GetMapping
+    @GetMapping({"", "/"})
     public List<QuestDto> listMyQuests() {
         return questService.listMyQuests();
     }
 
-    @PostMapping("/random")
+    @PostMapping({"/random", "/random/"})
     public QuestDto assignRandomQuest() {
         return questService.assignRandomQuest();
     }
@@ -33,7 +33,7 @@ public class QuestController {
         return questService.completeQuest(questId);
     }
 
-    @PostMapping("/friends/{targetUserId}/random")
+    @PostMapping({"/friends/{targetUserId}/random", "/friends/{targetUserId}/random/"})
     public QuestDto assignRandomQuestToFriend(@PathVariable UUID targetUserId) {
         return questService.assignRandomQuestToFriend(targetUserId);
     }

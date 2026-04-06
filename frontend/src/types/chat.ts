@@ -95,3 +95,8 @@ export interface WsMessagePayload {
 export interface IgrisChatResponse {
   reply: string;
 }
+
+export interface IgrisChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}

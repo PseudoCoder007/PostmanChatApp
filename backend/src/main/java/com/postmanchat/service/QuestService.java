@@ -72,7 +72,8 @@ public class QuestService {
         UUID userId = Authz.requireUserId();
         Profile sender = profileRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
-        if (sender.getCoins() < 10) {
+        progressionService.refreshUnlocks(sender);
+        if (!sender.isFriendQuestsUnlocked()) {
             throw new IllegalArgumentException("Sending friend quests unlocks at 10 coins");
         }
         if (!friendService.areFriends(userId, targetUserId)) {

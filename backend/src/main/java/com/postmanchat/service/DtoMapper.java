@@ -30,9 +30,9 @@ public final class DtoMapper {
                 p.getCoins(),
                 p.getLevel(),
                 p.getTitle(),
-                p.getCoins() >= 5,
-                p.getCoins() >= 10,
-                p.getCoins() >= 5
+                p.isProfilePhotoUnlocked(),
+                p.isFriendQuestsUnlocked(),
+                p.isIgrisUnlocked()
         );
     }
 

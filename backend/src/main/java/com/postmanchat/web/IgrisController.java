@@ -1,5 +1,6 @@
 package com.postmanchat.web;
 
+import com.postmanchat.domain.Profile;
 import com.postmanchat.service.IgrisService;
 import com.postmanchat.service.ProfileService;
 import com.postmanchat.web.dto.IgrisChatRequest;
@@ -24,7 +25,7 @@ public class IgrisController {
 
     @PostMapping("/chat")
     public IgrisChatResponse chat(@Valid @RequestBody IgrisChatRequest request) {
-        profileService.assertIgrisUnlocked();
-        return new IgrisChatResponse(igrisService.chat(request.message()));
+        Profile profile = profileService.getCurrentProfile();
+        return new IgrisChatResponse(igrisService.chat(profile, request.message(), request.history()));
     }
 }

@@ -71,7 +71,7 @@ public class MessageService {
     public List<MessageDto> listMessages(UUID roomId, Instant before, int limit) {
         UUID userId = Authz.requireUserId();
         roomService.assertMember(roomId, userId);
-        int capped = Math.clamp(limit, 1, 100);
+        int capped = Math.max(1, Math.min(limit, 100));
         List<Message> raw = messageRepository.findPageForRoom(roomId, before, PageRequest.of(0, capped));
         List<Message> chronological = raw.stream().toList();
         List<Message> mutable = new java.util.ArrayList<>(chronological);

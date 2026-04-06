@@ -30,6 +30,7 @@ public class WebConfig implements WebMvcConfigurer {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration("/uploads/**", config);
         return source;
     }
 

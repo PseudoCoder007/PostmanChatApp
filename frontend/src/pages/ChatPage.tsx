@@ -3,12 +3,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useStompRoom } from '@/hooks/useStompRoom';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiFetchForm } from '@/lib/api';
+import { getUserFriendlyErrorMessage } from '@/lib/errorMessages';
 import { supabase } from '@/lib/supabase';
-import type { Attachment, FriendRequest, IgrisChatResponse, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, WsMessagePayload } from '@/types/chat';
+import { useTutorial } from '@/hooks/useTutorial';
+import { TutorialOverlay } from '@/components/TutorialOverlay';
+import { LevelUpCelebration } from '@/components/LevelUpCelebration';
+import type { Attachment, FriendRequest, IgrisChatResponse, IgrisChatTurn, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, WsMessagePayload } from '@/types/chat';
 
-type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'profile';
+type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile';
 type IgrisMessage = { id: string; role: 'user' | 'assistant'; content: string };
+type FocusMission = { id: string; title: string; description: string; reward: string; lane: string };
 
 const views: Array<{ key: ViewKey; label: string }> = [
   { key: 'chat', label: 'Chat' },
@@ -16,6 +21,7 @@ const views: Array<{ key: ViewKey; label: string }> = [
   { key: 'quests', label: 'Quests' },
   { key: 'igris', label: 'Igris' },
   { key: 'board', label: 'Board' },
+  { key: 'levels', label: 'Levels' },
   { key: 'profile', label: 'Profile' },
 ];
 
@@ -30,6 +36,8 @@ export default function ChatPage() {
   const lastNotificationRef = useRef<string | null>(null);
   const previousMessageCountRef = useRef(0);
   const previousUnreadCountRef = useRef(0);
+  const previousLevelRef = useRef<number | null>(null);
+  const [levelUpCelebration, setLevelUpCelebration] = useState<{ oldLevel: number; newLevel: number; title: string } | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>('chat');
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [draft, setDraft] = useState('');
@@ -37,39 +45,55 @@ export default function ChatPage() {
   const [roomSearch, setRoomSearch] = useState('');
   const [peopleSearch, setPeopleSearch] = useState('');
   const [profileForm, setProfileForm] = useState({ displayName: '', username: '', avatarUrl: '' });
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [igrisDraft, setIgrisDraft] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(() => readSoundPreference());
+  const [focusRefreshTick, setFocusRefreshTick] = useState(() => Math.floor(Date.now() / (10 * 60 * 1000)));
   const [igrisMessages, setIgrisMessages] = useState<IgrisMessage[]>([
     { id: 'intro', role: 'assistant', content: 'Igris online. I can be your funny low-key therapist friend, boredom killer, comeback coach, or chaos planner. Tell me the lore.' },
   ]);
   const bucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || 'chat-uploads';
 
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: async () => json<Profile>(await apiFetch('/api/me')), refetchInterval: 30000 });
-  const { data: allRooms = [] } = useQuery({ queryKey: ['rooms'], queryFn: async () => json<Room[]>(await apiFetch('/api/rooms')), refetchInterval: 30000 });
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: async () => json<Profile>(await apiFetch('/api/me')), staleTime: 60000, refetchOnWindowFocus: false, retry: false });
+  const { data: allRooms = [] } = useQuery({ queryKey: ['rooms'], queryFn: async () => json<Room[]>(await apiFetch('/api/rooms')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: searchedRooms = [] } = useQuery({
     queryKey: ['rooms', roomSearch],
     queryFn: async () => json<Room[]>(await apiFetch(`/api/rooms?${new URLSearchParams({ query: roomSearch.trim() })}`)),
-    enabled: roomSearch.trim().length > 0,
+    enabled: !!me && roomSearch.trim().length > 0,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
-  const { data: friendships = [] } = useQuery({ queryKey: ['friends'], queryFn: async () => json<FriendRequest[]>(await apiFetch('/api/friends')), refetchInterval: 30000 });
-  const { data: quests = [] } = useQuery({ queryKey: ['quests'], queryFn: async () => json<Quest[]>(await apiFetch('/api/quests')) });
-  const { data: leaderboard = [] } = useQuery({ queryKey: ['leaderboard'], queryFn: async () => json<LeaderboardEntry[]>(await apiFetch('/api/leaderboard?limit=20')) });
+  const { data: friendships = [] } = useQuery({ queryKey: ['friends'], queryFn: async () => json<FriendRequest[]>(await apiFetch('/api/friends')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
+  const { data: quests = [] } = useQuery({ queryKey: ['quests'], queryFn: async () => json<Quest[]>(await apiFetch('/api/quests')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
+  const { data: leaderboard = [] } = useQuery({ queryKey: ['leaderboard'], queryFn: async () => json<LeaderboardEntry[]>(await apiFetch('/api/leaderboard?limit=20')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => json<NotificationItem[]>(await apiFetch('/api/notifications')),
-    refetchInterval: 15000,
+    enabled: !!me,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    refetchInterval: () => document.visibilityState === 'visible' ? 60000 : false,
+    refetchIntervalInBackground: false,
+    retry: false,
   });
   const { data: people = [] } = useQuery({
     queryKey: ['profiles', peopleSearch],
     queryFn: async () => json<Profile[]>(await apiFetch(`/api/profiles?${new URLSearchParams({ query: peopleSearch.trim(), limit: '10' })}`)),
-    enabled: peopleSearch.trim().length > 0,
+    enabled: !!me && peopleSearch.trim().length > 0,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
   const { data: messages = [], refetch: refetchMessages } = useQuery({
     queryKey: ['messages', activeRoomId],
     queryFn: async () => json<Message[]>(await apiFetch(`/api/rooms/${activeRoomId}/messages?limit=80`)),
-    enabled: !!activeRoomId,
+    enabled: !!me && !!activeRoomId,
+    staleTime: 15000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   useEffect(() => {
@@ -83,15 +107,23 @@ export default function ChatPage() {
   }, [activeRoomId, allRooms]);
 
   useEffect(() => {
+    if (!me) return;
     const tick = () => void apiFetch('/api/me/presence', { method: 'POST' });
     tick();
     const interval = window.setInterval(tick, 60000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [me]);
 
   useEffect(() => {
     window.localStorage.setItem('postmanchat.sound.enabled', soundEnabled ? '1' : '0');
   }, [soundEnabled]);
+
+  useEffect(() => {
+    const refresh = () => setFocusRefreshTick(Math.floor(Date.now() / (10 * 60 * 1000)));
+    refresh();
+    const interval = window.setInterval(refresh, 60000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const latest = notifications.find((item) => !item.read);
@@ -110,6 +142,11 @@ export default function ChatPage() {
   const completedQuests = quests.filter((quest) => quest.status === 'completed');
   const activeRoom = allRooms.find((room) => room.id === activeRoomId);
   const igrisCoinsRemaining = Math.max(0, 5 - (me?.coins ?? 0));
+  const focusMissions = useMemo(
+    () => buildFocusMissions({ tick: focusRefreshTick, canUseIgris: !!me?.canUseIgris, canChallengeFriends: !!me?.canChallengeFriends, activeQuestCount: activeQuests.length }),
+    [activeQuests.length, focusRefreshTick, me?.canChallengeFriends, me?.canUseIgris],
+  );
+  const nextFocusRefreshLabel = useMemo(() => formatCountdown(((focusRefreshTick + 1) * 10 * 60 * 1000) - Date.now()), [focusRefreshTick]);
 
   useEffect(() => {
     const count = unread.length;
@@ -124,6 +161,37 @@ export default function ChatPage() {
     }
     previousMessageCountRef.current = orderedMessages.length;
   }, [orderedMessages, me?.id, soundEnabled]);
+
+  // Tutorial management
+  const tutorial = useTutorial();
+  useEffect(() => {
+    if (tutorial.currentStep && tutorial.currentStep.targetViewOrAction) {
+      // Map tutorial target to a view
+      const viewMap: Record<string, ViewKey> = {
+        'chat': 'chat',
+        'quests': 'quests',
+        'igris': 'igris',
+        'profile': 'profile',
+        'levels': 'levels',
+      };
+      const targetView = viewMap[tutorial.currentStep.targetViewOrAction] as ViewKey;
+      if (targetView) {
+        setActiveView(targetView);
+      }
+    }
+  }, [tutorial.currentStep?.id]);
+
+  // Level-up celebration
+  useEffect(() => {
+    if (me?.level && previousLevelRef.current && me.level > previousLevelRef.current) {
+      const oldLevel = previousLevelRef.current;
+      const newLevel = me.level;
+      const newTitle = me.title || 'Player';
+      setLevelUpCelebration({ oldLevel, newLevel, title: newTitle });
+      if (soundEnabled) playUiTone('success');
+    }
+    previousLevelRef.current = me?.level ?? 1;
+  }, [me?.level, soundEnabled]);
 
   function onWsEvent(payload: WsMessagePayload) {
     if (!activeRoomId || payload.message.roomId !== activeRoomId) return;
@@ -149,66 +217,114 @@ export default function ChatPage() {
   };
 
   const updateProfile = useMutation({
-    mutationFn: async () => json<Profile>(await apiFetch('/api/me', { method: 'PATCH', body: JSON.stringify(profileForm) })),
+    mutationFn: async (nextProfileForm: typeof profileForm) => json<Profile>(await apiFetch('/api/me', { method: 'PATCH', body: JSON.stringify(nextProfileForm) })),
     onSuccess: () => { toast.success('Profile updated'); invalidateCore(); },
-    onError: (error: Error) => toast.error(error.message || 'Profile update failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const generateQuest = useMutation({
     mutationFn: async () => json<Quest>(await apiFetch('/api/quests/random', { method: 'POST' })),
     onSuccess: () => { playUiTone('success'); toast.success('New mission generated'); invalidateCore(); setActiveView('quests'); },
-    onError: (error: Error) => toast.error(error.message || 'Quest generation failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const challengeFriend = useMutation({
     mutationFn: async ({ targetUserId }: { targetUserId: string }) => json<Quest>(await apiFetch(`/api/quests/friends/${targetUserId}/random`, { method: 'POST' })),
     onSuccess: () => { playUiTone('success'); toast.success('Friend quest sent'); invalidateCore(); setActiveView('quests'); },
-    onError: (error: Error) => toast.error(error.message || 'Friend quest failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const createGroupRoom = useMutation({
     mutationFn: async ({ name }: { name: string }) => json<Room>(await apiFetch('/api/rooms', { method: 'POST', body: JSON.stringify({ name, type: 'group', targetUserId: null }) })),
     onSuccess: (room) => { playUiTone('success'); toast.success('Room deployed'); invalidateCore(); setGroupName(''); setActiveRoomId(room.id); setActiveView('chat'); },
-    onError: (error: Error) => toast.error(error.message || 'Room creation failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const addFriend = useMutation({
     mutationFn: async ({ targetUserId }: { targetUserId: string }) => json<FriendRequest>(await apiFetch(`/api/friends/${targetUserId}/request`, { method: 'POST' })),
     onSuccess: () => { toast.success('Friend request sent'); invalidateCore(); },
-    onError: (error: Error) => toast.error(error.message || 'Friend request failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const acceptFriend = useMutation({
     mutationFn: async ({ otherUserId }: { otherUserId: string }) => json<FriendRequest>(await apiFetch(`/api/friends/${otherUserId}/accept`, { method: 'POST' })),
     onSuccess: () => { toast.success('Friend request accepted'); invalidateCore(); },
-    onError: (error: Error) => toast.error(error.message || 'Accept failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const createDirectRoom = useMutation({
     mutationFn: async ({ targetUserId }: { targetUserId: string }) => json<Room>(await apiFetch('/api/rooms', { method: 'POST', body: JSON.stringify({ name: '', type: 'direct', targetUserId }) })),
     onSuccess: (room) => { playUiTone('success'); toast.success('Direct room opened'); invalidateCore(); setPeopleSearch(''); setActiveRoomId(room.id); setActiveView('chat'); },
-    onError: (error: Error) => toast.error(error.message || 'Direct room failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
+
+  async function uploadAttachmentToBackend(file: File): Promise<Attachment> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return json<Attachment>(await apiFetchForm('/api/attachments', form, { method: 'POST' }));
+  }
+
   const uploadAttachment = useMutation({
     mutationFn: async (file: File) => {
+      if (file.size === 0) {
+        throw new Error('Selected attachment is empty. Choose a different file.');
+      }
+
       const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
       const objectPath = `attachments/${crypto.randomUUID()}.${ext}`;
       const uploaded = await supabase.storage.from(bucket).upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || guessFileType(file.name) });
-      if (uploaded.error) throw new Error(uploaded.error.message);
+      if (uploaded.error) {
+        return uploadAttachmentToBackend(file);
+      }
+
       const publicUrl = supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
-      return json<Attachment>(await apiFetch('/api/attachments/register', { method: 'POST', body: JSON.stringify({ originalName: file.name, storedName: objectPath, contentType: file.type || guessFileType(file.name), sizeBytes: file.size, publicUrl }) }));
+      if (!publicUrl) {
+        return uploadAttachmentToBackend(file);
+      }
+
+      try {
+        return json<Attachment>(await apiFetch('/api/attachments/register', { method: 'POST', body: JSON.stringify({ originalName: file.name, storedName: objectPath, contentType: file.type || guessFileType(file.name), sizeBytes: file.size, publicUrl }) }));
+      } catch (error) {
+        return uploadAttachmentToBackend(file);
+      }
     },
   });
   const sendMessage = useMutation({
     mutationFn: async ({ roomId, content, attachmentId }: { roomId: string; content: string; attachmentId: string | null }) =>
       json<Message>(await apiFetch(`/api/rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify({ content, replyTo: null, attachmentId }) })),
     onSuccess: () => { playUiTone('send'); setDraft(''); setSelectedFile(null); setUploadWarning(null); void refetchMessages(); invalidateCore(); },
-    onError: (error: Error) => toast.error(error.message || 'Message send failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const markNotificationRead = useMutation({
     mutationFn: async ({ notificationId }: { notificationId: string }) => json<NotificationItem>(await apiFetch(`/api/notifications/${notificationId}/read`, { method: 'POST' })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
-    onError: (error: Error) => toast.error(error.message || 'Notification update failed'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const askIgris = useMutation({
-    mutationFn: async (message: string) => json<IgrisChatResponse>(await apiFetch('/api/igris/chat', { method: 'POST', body: JSON.stringify({ message }) })),
+    mutationFn: async (message: string) => {
+      const history: IgrisChatTurn[] = igrisMessages.slice(-6).map((item) => ({ role: item.role, content: item.content }));
+      return json<IgrisChatResponse>(await apiFetch('/api/igris/chat', { method: 'POST', body: JSON.stringify({ message, history }) }));
+    },
     onSuccess: (res, message) => { playUiTone('success'); setIgrisMessages((old) => [...old, { id: crypto.randomUUID(), role: 'user', content: message }, { id: crypto.randomUUID(), role: 'assistant', content: res.reply }]); setIgrisDraft(''); },
-    onError: (error: Error, message) => { toast.error(error.message || 'Igris comms failed'); setIgrisMessages((old) => [...old, { id: crypto.randomUUID(), role: 'user', content: message }, { id: crypto.randomUUID(), role: 'assistant', content: String(error.message || 'Igris comms failed.') }]); },
+    onError: (error: Error, message) => { toast.error(getUserFriendlyErrorMessage(error)); setIgrisMessages((old) => [...old, { id: crypto.randomUUID(), role: 'user', content: message }, { id: crypto.randomUUID(), role: 'assistant', content: String(getUserFriendlyErrorMessage(error)) }]); },
   });
+
+  async function uploadProfilePhoto(file: File) {
+    if (!me?.profilePhotoUnlocked) {
+      throw new Error('Profile photo unlock requires 5 coins');
+    }
+    if (!file.type.startsWith('image/')) {
+      throw new Error('Profile photo must be an image');
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      throw new Error('Profile photo must be smaller than 10 MB');
+    }
+    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'png';
+    const objectPath = `avatars/${me?.id ?? crypto.randomUUID()}.${ext}`;
+    const uploaded = await supabase.storage.from(bucket).upload(objectPath, file, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: file.type || 'image/png',
+    });
+    if (uploaded.error) {
+      throw new Error(uploaded.error.message);
+    }
+    return supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
+  }
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -218,12 +334,32 @@ export default function ChatPage() {
   async function handleSend() {
     if (!activeRoomId) return;
     let attachmentId: string | null = null;
-    if (selectedFile) {
-      if (selectedFile.size > 50 * 1024 * 1024) return setUploadWarning('This file is larger than 50 MB. Choose a smaller file.');
-      attachmentId = (await uploadAttachment.mutateAsync(selectedFile)).id;
+    try {
+      if (selectedFile) {
+        if (selectedFile.size > 50 * 1024 * 1024) return setUploadWarning('This file is larger than 50 MB. Choose a smaller file.');
+        attachmentId = (await uploadAttachment.mutateAsync(selectedFile)).id;
+      }
+      if (!draft.trim() && !attachmentId) return;
+      await sendMessage.mutateAsync({ roomId: activeRoomId, content: draft.trim(), attachmentId });
+    } catch (error) {
+      toast.error(getUserFriendlyErrorMessage(error instanceof Error ? error : String(error)));
     }
-    if (!draft.trim() && !attachmentId) return;
-    sendMessage.mutate({ roomId: activeRoomId, content: draft.trim(), attachmentId });
+  }
+
+  async function handleProfileSave() {
+    try {
+      let avatarUrl = profileForm.avatarUrl;
+      if (profileImageFile) {
+        avatarUrl = await uploadProfilePhoto(profileImageFile);
+      }
+      await updateProfile.mutateAsync({ ...profileForm, avatarUrl });
+      setProfileImageFile(null);
+      if (avatarUrl !== profileForm.avatarUrl) {
+        setProfileForm((old) => ({ ...old, avatarUrl }));
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Profile update failed');
+    }
   }
 
   return (
@@ -244,7 +380,7 @@ export default function ChatPage() {
 
       <section className="status-grid">
         <div className="stat-card tone-gold"><span>Rank</span><strong>Lv {me?.level ?? '--'}</strong><small>{me?.title ?? 'Loading'}</small></div>
-        <div className="stat-card tone-blue"><span>Wallet</span><strong>{me?.coins ?? '--'} coins</strong><small>{me?.profilePhotoUnlocked ? 'Photo unlocked' : 'Photo at 5 coins'}</small></div>
+        <div className="stat-card tone-blue"><span>Wallet</span><strong>{me?.coins ?? 0} coins</strong><small>{me?.profilePhotoUnlocked ? 'Photo unlocked' : 'Photo at 5 coins'}</small></div>
         <div className="stat-card tone-green"><span>Squad Online</span><strong>{onlineFriends.length}</strong><small>{friends.length} total allies</small></div>
         <div className="stat-card tone-orange"><span>Live Missions</span><strong>{activeQuests.length}</strong><small>{completedQuests.length} completed</small></div>
       </section>
@@ -269,7 +405,7 @@ export default function ChatPage() {
             <div className="section-header compact"><div><span className="eyebrow">Deploy</span><h3>New squad room</h3></div><span className="metric-badge">20 coins</span></div>
             <input className="chat-input" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Create a dramatic room name" />
             <button type="button" className="btn" disabled={createGroupRoom.isPending || !groupName.trim()} onClick={() => createGroupRoom.mutate({ name: groupName.trim() })}>Create room</button>
-            {createGroupRoom.error ? <div className="error">{String(createGroupRoom.error.message)}</div> : <div className="muted-line">Group room creation costs 20 coins.</div>}
+            {createGroupRoom.error ? <div className="error">{getUserFriendlyErrorMessage(createGroupRoom.error)}</div> : <div className="muted-line">Group room creation costs 20 coins.</div>}
           </div>
         </aside>
 
@@ -322,6 +458,7 @@ export default function ChatPage() {
           {activeView === 'quests' ? (
             <section className="grid-stage">
               <section className="panel spotlight-panel full-span"><div className="section-header"><div><span className="eyebrow">Mission Control</span><h2>Auto-verified quest board</h2></div><span className="metric-badge">{activeQuests.length} active</span></div><p>Igris quests stay funny, but rewards only unlock when the app sees the matching DM, group post, room creation, proof image, or document upload.</p><div className="inline-actions"><button type="button" className="btn" disabled={generateQuest.isPending} onClick={() => generateQuest.mutate()}>Generate quest</button><button type="button" className="btn btn-secondary" onClick={() => setActiveView('igris')}>Open Igris</button></div></section>
+              <section className="panel full-span"><div className="section-header"><div><span className="eyebrow">Focus Refresh</span><h2>Rotating side quests</h2></div><span className="metric-badge">Refresh {nextFocusRefreshLabel}</span></div><p>These rotate every 10 minutes to keep the app feeling alive. They are guidance prompts for Igris and your own gameplay loop; the auto-verified board above still controls guaranteed XP and coin rewards.</p><div className="list-stack">{focusMissions.map((mission) => <div key={mission.id} className="entity-row"><div><strong>{mission.title}</strong><div className="muted-line">{mission.lane} - {mission.reward}</div><div className="muted-line">{mission.description}</div></div><button type="button" className="btn btn-secondary" onClick={() => { setActiveView('igris'); setIgrisDraft(`Turn this into a fun side quest with clear steps: ${mission.title}. ${mission.description}`); }}>{me?.canUseIgris ? 'Remix with Igris' : 'Queue prompt'}</button></div>)}</div></section>
               {quests.map((quest) => <section key={quest.id} className={`panel quest-panel ${quest.status === 'completed' ? 'completed' : ''}`}><div className="section-header compact"><div><span className="eyebrow">{quest.source === 'igris' ? 'Igris mission' : 'Quest'}</span><h3>{quest.title}</h3></div><span className={`status-pill ${quest.status}`}>{quest.status}</span></div><p>{quest.description}</p><div className="banner-metrics"><span className="metric-tag"><small>XP</small><strong>{quest.rewardXp}</strong></span><span className="metric-tag"><small>Coins</small><strong>{quest.rewardCoins}</strong></span><span className="metric-tag"><small>Trigger</small><strong>{triggerLabel(quest.triggerType)}</strong></span></div><div className="support-line">{quest.status === 'assigned' ? 'Complete the matching in-app action to auto-finish this mission.' : `Completed ${new Date(quest.completedAt ?? quest.assignedAt).toLocaleString()}`}</div></section>)}
             </section>
           ) : null}
@@ -333,11 +470,11 @@ export default function ChatPage() {
                 {me?.canUseIgris ? (
                   <>
                     <div className="igris-stream">{igrisMessages.map((message) => <div key={message.id} className={`igris-card ${message.role}`}><strong>{message.role === 'assistant' ? 'Igris' : 'You'}</strong><p>{message.content}</p></div>)}</div>
-                    <div className="composer-toolbar igris-toolbar"><input className="chat-input" value={igrisDraft} onChange={(e) => setIgrisDraft(e.target.value)} placeholder="Vent, ask for support, request a joke, get a comeback, or ask for a chaotic idea." /><button type="button" className="btn" disabled={askIgris.isPending || !igrisDraft.trim()} onClick={() => askIgris.mutate(igrisDraft.trim())}>Send</button></div>
+                    <div className="composer-toolbar igris-toolbar"><input className="chat-input" value={igrisDraft} onChange={(e) => setIgrisDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && igrisDraft.trim() && !askIgris.isPending) { e.preventDefault(); askIgris.mutate(igrisDraft.trim()); } }} placeholder="Vent, ask for support, request a joke, get a comeback, or ask for a chaotic idea. Press Enter to send." /><button type="button" className="btn" disabled={askIgris.isPending || !igrisDraft.trim()} onClick={() => askIgris.mutate(igrisDraft.trim())}>Send</button></div>
                   </>
                 ) : <div className="locked-panel"><div className="lock-orb">5</div><h3>Igris unlocks at 5 coins</h3><p>Earn {igrisCoinsRemaining} more coin{igrisCoinsRemaining === 1 ? '' : 's'} through chat and missions to unlock your funny supportive Gen Z sidekick.</p></div>}
               </section>
-              <aside className="panel quick-panel"><div className="section-header compact"><div><span className="eyebrow">Quick prompts</span><h3>Support + chaos</h3></div></div><div className="quick-grid">{['I am bored. Entertain me for 5 minutes.', 'I feel low-key sad. Talk to me nicely.', 'Roast my room names gently but make it funny.', 'Give me a chaotic but harmless DM opener.'].map((prompt) => <button key={prompt} type="button" disabled={!me?.canUseIgris} onClick={() => askIgris.mutate(prompt)}>{prompt}</button>)}</div></aside>
+              <aside className="panel quick-panel"><div className="section-header compact"><div><span className="eyebrow">Quick prompts</span><h3>Support + chaos</h3></div></div><div className="quick-grid">{['I am bored. Entertain me for 5 minutes.', 'I feel low-key sad. Talk to me nicely.', 'Roast my room names gently but make it funny.', 'Give me a chaotic but harmless DM opener.', 'Build me a workout side quest for the next 10 minutes.', 'Give me 3 rotating daily missions for this app.'].map((prompt) => <button key={prompt} type="button" disabled={!me?.canUseIgris} onClick={() => askIgris.mutate(prompt)}>{prompt}</button>)}</div></aside>
             </section>
           ) : null}
 
@@ -348,9 +485,62 @@ export default function ChatPage() {
             </section>
           ) : null}
 
+          {activeView === 'levels' ? (
+            <section className="grid-stage">
+              <section className="panel">
+                <div className="section-header">
+                  <div><span className="eyebrow">Progression</span><h2>Level roadmap</h2></div>
+                </div>
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '12px', color: '#888' }}>Current level</span>
+                    <strong style={{ fontSize: '14px' }}>Lv {me?.level ?? 1}</strong>
+                  </div>
+                  <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', overflow: 'hidden', height: '8px' }}>
+                    <div style={{ backgroundColor: '#4f46e5', height: '100%', width: `${getXpProgressToNextLevel(me?.xp ?? 0).mainProgress}%`, transition: 'width 0.3s ease' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#666', marginTop: '6px' }}>
+                    <span>{getXpProgressToNextLevel(me?.xp ?? 0).current} XP</span>
+                    <span>{getXpProgressToNextLevel(me?.xp ?? 0).required} needed</span>
+                  </div>
+                </div>
+                <div style={{ backgroundColor: '#0a0a0a', borderRadius: '8px', padding: '12px', marginBottom: '16px', borderLeft: '3px solid #4f46e5' }}>
+                  <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>Current rank</div>
+                  <strong style={{ fontSize: '18px', display: 'block' }}>{getLevelInfo(me?.level ?? 1).title}</strong>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>{getLevelInfo(me?.level ?? 1).description}</div>
+                </div>
+              </section>
+              <section className="panel">
+                <div className="section-header compact"><span className="eyebrow">All levels</span><h3>Growth curve</h3></div>
+                <div className="list-stack">
+                  {Array.from({ length: 10 }, (_, i) => {
+                    const level = i + 1;
+                    const info = getLevelInfo(level);
+                    const currentLevel = me?.level ?? 1;
+                    const isCurrentLevel = level === currentLevel;
+                    const isCompleted = level < currentLevel;
+                    
+                    return (
+                      <div key={level} style={{ padding: '12px', backgroundColor: isCurrentLevel ? '#1a1a1a' : isCompleted ? '#0a5f0a' : '#0a0a0a', borderRadius: '6px', borderLeft: `3px solid ${isCurrentLevel ? '#4f46e5' : isCompleted ? '#22c55e' : '#444'}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <strong>Lv {level} {info.title}</strong>
+                          <span style={{ fontSize: '12px', color: isCompleted ? '#22c55e' : '#888' }}>{info.xpRequired} XP {isCompleted ? '✓' : ''}</span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>{info.description}</div>
+                        <div style={{ marginTop: '8px', backgroundColor: '#0a0a0a', borderRadius: '4px', height: '6px', overflow: 'hidden' }}>
+                          <div style={{ backgroundColor: isCompleted ? '#22c55e' : isCurrentLevel ? '#4f46e5' : '#333', height: '100%', width: isCompleted ? '100%' : isCurrentLevel ? `${getXpProgressToNextLevel(me?.xp ?? 0).mainProgress}%` : '0%' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            </section>
+          ) : null}
+
           {activeView === 'profile' ? (
             <section className="grid-stage">
-              <section className="panel"><div className="section-header"><div><span className="eyebrow">Identity</span><h2>Profile editor</h2></div></div><input className="chat-input" value={profileForm.displayName} onChange={(e) => setProfileForm((old) => ({ ...old, displayName: e.target.value }))} placeholder="Display name" /><input className="chat-input" value={profileForm.username} onChange={(e) => setProfileForm((old) => ({ ...old, username: e.target.value.toLowerCase() }))} placeholder="Unique username" /><input className="chat-input" value={profileForm.avatarUrl} onChange={(e) => setProfileForm((old) => ({ ...old, avatarUrl: e.target.value }))} placeholder={me?.profilePhotoUnlocked ? 'Profile photo URL' : 'Unlock photo at 5 coins'} /><button type="button" className="btn" disabled={updateProfile.isPending} onClick={() => updateProfile.mutate()}>Save loadout</button>{updateProfile.error ? <div className="error">{String(updateProfile.error.message)}</div> : null}</section>
+              <section className="panel"><div className="section-header"><div><span className="eyebrow">Identity</span><h2>Profile editor</h2></div></div><input className="chat-input" value={profileForm.displayName} onChange={(e) => setProfileForm((old) => ({ ...old, displayName: e.target.value }))} placeholder="Display name" /><input className="chat-input" value={profileForm.username} onChange={(e) => setProfileForm((old) => ({ ...old, username: e.target.value.toLowerCase() }))} placeholder="Unique username" /><div style={{ position: 'relative', marginY: '16px' }}>{profileImageFile ? <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}><img src={URL.createObjectURL(profileImageFile)} alt="Selected preview" style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '400px', objectFit: 'cover' }} /><div style={{ padding: '8px', backgroundColor: '#0a0a0a', fontSize: '12px', color: '#888' }}>📷 {profileImageFile.name}</div></div> : profileForm.avatarUrl ? <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}><img className="attachment-preview" src={profileForm.avatarUrl} alt="Profile preview" style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }} /></div> : <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', padding: '32px', textAlign: 'center', marginBottom: '12px', color: '#666', minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No photo yet</div>}</div><label className="file-picker" style={{ cursor: me?.profilePhotoUnlocked ? 'pointer' : 'not-allowed', opacity: me?.profilePhotoUnlocked ? 1 : 0.6 }}><span style={{ fontSize: '14px', fontWeight: 500 }}>{me?.profilePhotoUnlocked ? (profileImageFile || profileForm.avatarUrl ? '🔄 Swap photo' : '📸 Choose photo') : '🔒 Unlock at 5 coins'}</span><input type="file" accept="image/*" disabled={!me?.profilePhotoUnlocked} onChange={(e) => setProfileImageFile(e.target.files?.[0] ?? null)} style={{ display: 'none' }} /></label><div className="inline-actions">{profileImageFile ? <><button type="button" className="btn" disabled={updateProfile.isPending} onClick={() => void handleProfileSave()} style={{ flex: 1 }}>✓ Confirm & Save</button><button type="button" className="btn btn-secondary" disabled={updateProfile.isPending} onClick={() => setProfileImageFile(null)} style={{ flex: 1 }}>✕ Cancel</button></> : <><button type="button" className="btn" disabled={updateProfile.isPending || !profileForm.displayName.trim() || !profileForm.username.trim()} onClick={() => void handleProfileSave()}>Save loadout</button>{profileForm.avatarUrl && <button type="button" className="btn btn-secondary" disabled={updateProfile.isPending} onClick={() => { setProfileImageFile(null); void updateProfile.mutate({ ...profileForm, avatarUrl: '' }); }}>Remove photo</button>}</> }</div>{updateProfile.error ? <div className="error">{getUserFriendlyErrorMessage(updateProfile.error)}</div> : null}</section>
               <section className="panel"><div className="section-header"><div><span className="eyebrow">Unlocks</span><h2>Progress systems</h2></div></div><div className="unlock-list"><div className="unlock-row"><strong>Profile photo</strong><span className={`status-pill ${me?.profilePhotoUnlocked ? 'completed' : 'assigned'}`}>{me?.profilePhotoUnlocked ? 'Unlocked' : 'Locked'}</span></div><div className="unlock-row"><strong>Igris console</strong><span className={`status-pill ${me?.canUseIgris ? 'completed' : 'assigned'}`}>{me?.canUseIgris ? 'Unlocked' : 'Locked'}</span></div><div className="unlock-row"><strong>Friend challenge quests</strong><span className={`status-pill ${me?.canChallengeFriends ? 'completed' : 'assigned'}`}>{me?.canChallengeFriends ? 'Unlocked' : 'Locked'}</span></div><div className="unlock-row"><strong>Group room deployment</strong><span className={`status-pill ${(me?.coins ?? 0) >= 20 ? 'completed' : 'assigned'}`}>{(me?.coins ?? 0) >= 20 ? 'Ready' : '20 coins required'}</span></div></div></section>
             </section>
           ) : null}
@@ -358,10 +548,19 @@ export default function ChatPage() {
 
         <aside className="intel-rail">
           <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Live intel</span><h3>Overview</h3></div></div><div className="intel-grid"><button type="button" className="intel-tile" onClick={() => setActiveView('board')}><span>Unread alerts</span><strong>{unread.length}</strong><small>Review</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('people')}><span>Online friends</span><strong>{onlineFriends.length}</strong><small>Open squad</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('quests')}><span>Quest streak</span><strong>{completedQuests.length}</strong><small>Mission board</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('igris')}><span>AI access</span><strong>{me?.canUseIgris ? 'Ready' : `${igrisCoinsRemaining} left`}</strong><small>Igris</small></button></div></section>
-          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Focus tools</span><h3>Engagement controls</h3></div></div><div className="support-stack"><button type="button" className="support-button" onClick={() => setActiveView('chat')}>Return to active channel</button><button type="button" className="support-button" onClick={() => setActiveView('quests')}>Open mission board</button><button type="button" className="support-button" onClick={() => setActiveView('people')}>Find squadmates</button><button type="button" className="support-button" onClick={() => { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); }}>Enable browser alerts</button></div></section>
-          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Daily briefing</span><h3>What matters now</h3></div></div><div className="briefing-list"><div className="briefing-row"><strong>{activeRoom ? getRoomTitle(activeRoom) : 'No active room'}</strong><span>{activeRoom ? (activeRoom.type === 'direct' ? 'Private line active.' : 'Squad channel active.') : 'Pick a room to see live traffic.'}</span></div><div className="briefing-row"><strong>{activeQuests.length} active mission{activeQuests.length === 1 ? '' : 's'}</strong><span>{activeQuests.length ? 'Complete verified actions for XP and coins.' : 'Generate a mission to start earning.'}</span></div><div className="briefing-row"><strong>{me?.canUseIgris ? 'Igris unlocked' : 'Igris locked'}</strong><span>{me?.canUseIgris ? 'Use Igris for jokes, emotional support, chaotic prompts, and social recovery missions.' : `Earn ${igrisCoinsRemaining} more coin${igrisCoinsRemaining === 1 ? '' : 's'} to unlock it.`}</span></div></div></section>
+          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Focus tools</span><h3>Engagement controls</h3></div><span className="metric-badge">{nextFocusRefreshLabel}</span></div><div className="support-stack"><button type="button" className="support-button" onClick={() => setActiveView('chat')}>Return to active channel</button><button type="button" className="support-button" onClick={() => setActiveView('quests')}>Open mission board</button><button type="button" className="support-button" onClick={() => generateQuest.mutate()}>Generate AI mission</button><button type="button" className="support-button" disabled={!me?.canUseIgris} onClick={() => { setActiveView('igris'); askIgris.mutate('Give me a random funny quest that matches this app.'); }}>Ask Igris for quest ideas</button><button type="button" className="support-button" disabled={!me?.canUseIgris} onClick={() => { setActiveView('igris'); askIgris.mutate('Make me a workout planner side quest with a proof upload idea.'); }}>Workout planner</button><button type="button" className="support-button" onClick={() => setActiveView('people')}>Find squadmates</button><button type="button" className="support-button" onClick={() => { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); }}>Enable browser alerts</button></div></section>
+          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Daily briefing</span><h3>What matters now</h3></div></div><div className="briefing-list"><div className="briefing-row"><strong>{activeRoom ? getRoomTitle(activeRoom) : 'No active room'}</strong><span>{activeRoom ? (activeRoom.type === 'direct' ? 'Private line active.' : 'Squad channel active.') : 'Pick a room to see live traffic.'}</span></div><div className="briefing-row"><strong>{activeQuests.length} active mission{activeQuests.length === 1 ? '' : 's'}</strong><span>{activeQuests.length ? 'Complete verified actions for XP and coins.' : 'Generate a mission to start earning.'}</span></div><div className="briefing-row"><strong>{focusMissions[0]?.title ?? 'No focus card'}</strong><span>{focusMissions[0]?.description ?? 'Side quests rotate every 10 minutes.'}</span></div><div className="briefing-row"><strong>{me?.canUseIgris ? 'Igris unlocked' : 'Igris locked'}</strong><span>{me?.canUseIgris ? 'Use Igris for jokes, emotional support, chaotic prompts, workout dares, and social recovery missions.' : `Earn ${igrisCoinsRemaining} more coin${igrisCoinsRemaining === 1 ? '' : 's'} to unlock it.`}</span></div></div></section>
         </aside>
       </section>
+      <TutorialOverlay />
+      {levelUpCelebration && (
+        <LevelUpCelebration
+          oldLevel={levelUpCelebration.oldLevel}
+          newLevel={levelUpCelebration.newLevel}
+          newTitle={levelUpCelebration.title}
+          onComplete={() => setLevelUpCelebration(null)}
+        />
+      )}
     </div>
   );
 }
@@ -388,6 +587,57 @@ function triggerLabel(triggerType: Quest['triggerType']) {
   }
 }
 
+// Level progression helpers
+interface LevelInfo {
+  level: number;
+  xpRequired: number;
+  title: string;
+  description: string;
+}
+
+function getLevelInfo(level: number): LevelInfo {
+  const titles = ['Newbie', 'Explorer', 'Social Ninja', 'Quest Master', 'Legend'];
+  const descriptions = [
+    'Just getting started',
+    'Finding your way',
+    'Mastering the game',
+    'Legendary presence',
+    'Unstoppable force',
+  ];
+  const title = titles[Math.min(level - 1, titles.length - 1)] || 'Legend';
+  const description = descriptions[Math.min(level - 1, descriptions.length - 1)] || 'Unstoppable force';
+  
+  // XP requirement per level: 10, 50, 120, 300, 750, 1875...
+  // Roughly: 10 * (2.5 ^ (level - 1))
+  const xpRequired = Math.ceil(10 * Math.pow(2.5, level - 1));
+  
+  return { level, xpRequired, title, description };
+}
+
+function getCurrentLevel(totalXp: number): number {
+  let level = 1;
+  let xpAccumulated = 0;
+  while (true) {
+    const nextLangInfo = getLevelInfo(level + 1);
+    if (xpAccumulated + nextLangInfo.xpRequired > totalXp) break;
+    xpAccumulated += nextLangInfo.xpRequired;
+    level++;
+  }
+  return level;
+}
+
+function getXpProgressToNextLevel(totalXp: number): { current: number; required: number; mainProgress: number } {
+  const currentLevel = getCurrentLevel(totalXp);
+  let xpAccumulated = 0;
+  for (let i = 1; i < currentLevel; i++) {
+    xpAccumulated += getLevelInfo(i).xpRequired;
+  }
+  const xpInCurrentLevel = totalXp - xpAccumulated;
+  const xpRequired = getLevelInfo(currentLevel).xpRequired;
+  const progress = Math.min(100, (xpInCurrentLevel / xpRequired) * 100);
+  return { current: xpInCurrentLevel, required: xpRequired, mainProgress: progress };
+}
+
 function AttachmentPreview({ attachment }: { attachment: Attachment }) {
   if (attachment.contentType.startsWith('image/')) return <img className="attachment-preview" src={attachment.publicUrl} alt={attachment.originalName} />;
   if (attachment.contentType.startsWith('video/')) return <video className="attachment-preview" src={attachment.publicUrl} controls />;
@@ -396,6 +646,39 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 
 function readSoundPreference() {
   try { return window.localStorage.getItem('postmanchat.sound.enabled') !== '0'; } catch { return true; }
+}
+
+function buildFocusMissions(input: { tick: number; canUseIgris: boolean; canChallengeFriends: boolean; activeQuestCount: number }): FocusMission[] {
+  const library: FocusMission[] = [
+    { id: 'dm-icebreaker', title: 'Soft Launch The Chaos', description: 'Send one friend a dramatic opener that sounds like you just returned from battle.', reward: 'Social XP', lane: 'DM quest' },
+    { id: 'room-rebrand', title: 'Rename Energy', description: 'Write down three better room names with more aura than the current roster.', reward: 'Creative unlock energy', lane: 'Naming' },
+    { id: 'pushup-proof', title: '10 Push In 10', description: 'Do 10 push-ups in the next 10 minutes and record a quick proof clip or photo for the plot.', reward: 'Max side-quest XP vibes', lane: 'Workout' },
+    { id: 'water-reset', title: 'Hydration Buff', description: 'Drink water, stand up, and stretch for 90 seconds before your next message spiral.', reward: 'Focus reset', lane: 'Recovery' },
+    { id: 'group-starter', title: 'Wake The Group Chat', description: 'Drop one funny line in a squad room that could actually start a thread.', reward: 'Group momentum', lane: 'Room quest' },
+    { id: 'sticker-hunt', title: 'Sticker Unlock Hunt', description: 'Send or plan one reaction image that deserves to become a future sticker pack slot.', reward: 'Sticker concept credit', lane: 'Collectible' },
+    { id: 'comeback-lab', title: 'Comeback Lab', description: 'Draft two harmless comeback lines that are funny, not mean, and keep your dignity intact.', reward: 'Aura repair', lane: 'Social' },
+    { id: 'proof-post', title: 'Proof Or Cap', description: 'Do one tiny real-life task and upload proof so the app feels less like pure talk.', reward: 'Upload momentum', lane: 'Proof quest' },
+  ];
+  const offset = Math.abs(input.tick) % library.length;
+  const rotated = [...library.slice(offset), ...library.slice(0, offset)];
+  const picks = rotated.slice(0, 3).map((mission) => ({ ...mission }));
+  if (!input.canUseIgris) {
+    picks[0] = { id: 'unlock-igris', title: 'Unlock Igris', description: 'Earn coins from chat and verified quests so the full Igris console can start giving custom side quests.', reward: 'AI unlock', lane: 'Unlock' };
+  }
+  if (input.canChallengeFriends) {
+    picks[1] = { id: 'friend-sidequest', title: 'Send A Side Quest', description: 'Pick one friend and send them a quest so the app feels like a live game, not a static inbox.', reward: 'Friend challenge XP', lane: 'Squad' };
+  }
+  if (input.activeQuestCount >= 3) {
+    picks[2] = { id: 'quest-cleanup', title: 'Finish Your Stack', description: 'You are capped on active quests. Clear one verified mission before spawning more chaos.', reward: 'Inventory space', lane: 'Cleanup' };
+  }
+  return picks;
+}
+
+function formatCountdown(ms: number) {
+  const safe = Math.max(0, ms);
+  const minutes = Math.floor(safe / 60000);
+  const seconds = Math.floor((safe % 60000) / 1000);
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 function playUiTone(kind: 'send' | 'message' | 'alert' | 'success') {

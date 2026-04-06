@@ -10,7 +10,7 @@ Postman Quest Chat is a realtime social messaging app built with React, Spring B
 - Direct messaging only after friend request acceptance
 - Search for people and rooms
 - Unique usernames and editable profiles
-- Supabase Storage uploads for images, videos, and documents
+- Supabase Storage uploads for images, videos, and documents with backend fallback
 - 50 MB upload warning and server-side validation
 - In-app notifications for inactive recipients plus browser notifications
 - Optional SMTP email notifications for inactive recipients
@@ -18,6 +18,16 @@ Postman Quest Chat is a realtime social messaging app built with React, Spring B
 - Toast-based success and failure feedback across auth and chat actions
 - Optional UI sounds for sends, alerts, and live activity
 - XP, coins, levels, titles, random quests, friend quests, Igris unlocks, and global leaderboard
+
+## Recent Updates
+
+### v0.0.1 (Latest)
+
+- **Attachment Upload Improvements**: Added robust fallback mechanism where uploads first attempt Supabase Storage, then fall back to backend file storage if Supabase fails
+- **Cross-User Attachment Access**: Fixed attachment URLs to use full base URLs instead of relative paths, ensuring attachments are accessible to all chat participants
+- **CORS Configuration**: Extended CORS support to include upload endpoints for better cross-origin resource sharing
+- **Environment Configuration**: Added `STORAGE_BASE_URL` environment variable for configurable base URL in different deployment environments
+- **Error Handling**: Improved upload error handling with user-friendly messages and better fallback logic
 
 ## Tech stack
 
@@ -58,10 +68,12 @@ The frontend uses Supabase Auth for sign up and sign in. After login, the browse
 
 ### Attachments
 
-- Files are uploaded from the authenticated frontend session to Supabase Storage.
+- Files are uploaded from the authenticated frontend session to Supabase Storage with fallback to backend file upload.
 - The backend registers attachment metadata and links it to messages.
 - Images and videos render inline when possible.
 - Other file types are shown as downloadable links.
+- Backend-uploaded files use full URLs for cross-user accessibility.
+- CORS is configured for both API and upload endpoints.
 
 ## Main features
 
@@ -126,9 +138,13 @@ DB_PASSWORD=<your_database_password>
 SUPABASE_JWT_ISSUER=https://<your-ref>.supabase.co/auth/v1
 CORS_ORIGINS=http://localhost:5173
 SERVER_PORT=8080
+STORAGE_BASE_URL=http://localhost:8080
 IGRIS_NVIDIA_API_URL=https://integrate.api.nvidia.com/v1/chat/completions
-IGRIS_NVIDIA_API_KEY=
+IGRIS_NVIDIA_API_KEY=<your_nvidia_api_key_here>
 IGRIS_MODEL=meta/llama-3.1-70b-instruct
+
+# Igris chat will only use the NVIDIA Integrate API when IGRIS_NVIDIA_API_KEY is set.
+# Without it, the app falls back to canned Igris responses.
 EMAIL_NOTIFICATIONS_ENABLED=false
 EMAIL_FROM=no-reply@your-app.example
 MAIL_HOST=
@@ -241,6 +257,218 @@ http://127.0.0.1:5173
 cd .\frontend
 npm run build
 ```
+
+### Testing Docker Build Locally
+
+```bash
+# Build the Docker image
+docker build -t postman-chat .
+
+# Run with docker-compose (recommended)
+docker-compose up
+
+# Or run directly
+docker run -p 8080:8080 \
+  -e DATABASE_URL="your_db_url" \
+  -e DB_USERNAME="postgres" \
+  -e DB_PASSWORD="your_password" \
+  -e SUPABASE_JWT_ISSUER="your_issuer" \
+  -e CORS_ORIGINS="http://localhost:5173" \
+  -e STORAGE_BASE_URL="http://localhost:8080" \
+  postman-chat
+```
+
+## AWS Hosting with Containers (Free Tier)
+
+This guide shows how to host your app on AWS for free using containers and GitHub Actions.
+
+### Prerequisites
+
+- AWS account (free tier available)
+- GitHub repository
+- Docker installed locally
+
+### Quick Setup Script (Linux/Mac)
+
+Run `setup-aws.sh` to automate ECR repository creation:
+
+```bash
+chmod +x setup-aws.sh
+./setup-aws.sh
+```
+
+### Step 1: Containerize the Application
+
+Create a `Dockerfile` in the root directory:
+
+```dockerfile
+# Multi-stage build for Java + Node.js app
+FROM maven:3.9.9-eclipse-temurin-21 AS backend-build
+WORKDIR /app
+COPY backend/pom.xml backend/
+COPY backend/src backend/src
+RUN mvn -f backend/pom.xml clean package -DskipTests
+
+FROM node:18 AS frontend-build
+WORKDIR /app
+COPY frontend/package*.json frontend/
+RUN npm ci
+COPY frontend/ frontend/
+RUN npm run build
+
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY --from=backend-build /app/backend/target/*.jar app.jar
+COPY --from=frontend-build /app/frontend/dist frontend/
+EXPOSE 8080
+CMD ["java", "-jar", "app.jar"]
+```
+
+Create a `.dockerignore` file:
+
+```
+.git
+.github
+node_modules
+backend/target
+frontend/node_modules
+*.md
+```
+
+### Step 2: Set up AWS Account
+
+1. Go to [aws.amazon.com](https://aws.amazon.com) and create a free account
+2. Verify your account and add a payment method (you won't be charged for free tier usage)
+3. Go to IAM console and create a user with these permissions:
+   - AmazonEC2ContainerRegistryFullAccess
+   - AWSAppRunnerFullAccess
+   - IAMFullAccess (for GitHub Actions)
+
+### Step 3: Create ECR Repository
+
+1. Go to Amazon ECR in AWS Console
+2. Create a private repository named `postman-chat`
+3. Note the repository URI (looks like `123456789012.dkr.ecr.us-east-1.amazonaws.com/postman-chat`)
+
+### Step 4: Set up GitHub Secrets
+
+In your GitHub repository:
+
+1. Go to Settings → Secrets and variables → Actions
+2. Add these secrets:
+   - `AWS_ACCESS_KEY_ID`: Your AWS access key
+   - `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
+   - `AWS_REGION`: Your AWS region (e.g., `us-east-1`)
+   - `ECR_REPOSITORY`: Your ECR repository URI
+
+### Step 5: Create GitHub Actions Workflow
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy to AWS App Runner
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Deploy to App Runner
+      uses: awslabs/amazon-app-runner-deploy@main
+      with:
+        service: postman-chat
+        image: ${{ steps.build.outputs.image }}
+        port: 8080
+        region: ${{ secrets.AWS_REGION }}
+        cpu: 1
+        memory: 2
+        wait-for-service-stability: true
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        DB_USERNAME: ${{ secrets.DB_USERNAME }}
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        SUPABASE_JWT_ISSUER: ${{ secrets.SUPABASE_JWT_ISSUER }}
+        CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+        STORAGE_BASE_URL: ${{ secrets.STORAGE_BASE_URL }}
+        IGRIS_NVIDIA_API_KEY: ${{ secrets.IGRIS_NVIDIA_API_KEY }}
+```
+
+### Step 6: Add Environment Secrets to GitHub
+
+Add these additional secrets to GitHub (from your `.env` files):
+
+- `DATABASE_URL`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+- `SUPABASE_JWT_ISSUER`
+- `CORS_ORIGINS` (set to your App Runner URL after first deployment)
+- `STORAGE_BASE_URL` (set to your App Runner URL after first deployment)
+- `IGRIS_NVIDIA_API_KEY` (optional)
+
+### Step 7: Deploy
+
+1. Push your code to GitHub main branch
+2. GitHub Actions will automatically build and deploy
+3. Go to AWS App Runner console to see your service
+4. Note the service URL (looks like `https://abc123xyz.us-east-1.awsapprunner.com`)
+
+### Step 8: Update CORS and Storage URL
+
+1. Update `CORS_ORIGINS` and `STORAGE_BASE_URL` secrets with your App Runner URL
+2. Push the change to trigger a new deployment
+
+### Step 9: Update Frontend Environment
+
+Update your `frontend/.env` file:
+
+```env
+VITE_SUPABASE_URL=https://<your-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your_anon_key>
+VITE_API_BASE_URL=https://your-app-runner-url
+VITE_SUPABASE_STORAGE_BUCKET=chat-uploads
+```
+
+### Cost Estimation
+
+- **Free Tier**: Up to 5 million requests/month, 100 active services
+- **App Runner**: ~$0.007 per GB-hour, ~$0.007 per vCPU-hour
+- **ECR**: Free for first 500MB/month
+- **Typical cost**: <$5/month for light usage
+
+### Troubleshooting
+
+- Check GitHub Actions logs for build errors
+- Check AWS CloudWatch logs for runtime errors
+- Ensure all environment variables are set correctly
+- Verify Supabase policies allow your App Runner IP range
 
 ## Current unlock rules
 

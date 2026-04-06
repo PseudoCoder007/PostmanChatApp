@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  postman-chat:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SUPABASE_JWT_ISSUER=${SUPABASE_JWT_ISSUER}
+      - CORS_ORIGINS=http://localhost:5173
+      - STORAGE_BASE_URL=http://localhost:8080
+      - SERVER_PORT=8080
+    volumes:
+      - ./backend/uploads:/app/uploads

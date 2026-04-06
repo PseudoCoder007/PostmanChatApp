@@ -51,7 +51,7 @@ public class AttachmentService {
                     storedName,
                     file.getContentType() == null ? "application/octet-stream" : file.getContentType(),
                     file.getSize(),
-                    "/uploads/" + storedName
+                    properties.getStorage().getBaseUrl() + "/uploads/" + storedName
             ));
             return toDto(saved);
         } catch (IOException ex) {

@@ -24,10 +24,12 @@ public class ProfileService {
 
     private final ProfileRepository profileRepository;
     private final FriendService friendService;
+    private final ProgressionService progressionService;
 
-    public ProfileService(ProfileRepository profileRepository, FriendService friendService) {
+    public ProfileService(ProfileRepository profileRepository, FriendService friendService, ProgressionService progressionService) {
         this.profileRepository = profileRepository;
         this.friendService = friendService;
+        this.progressionService = progressionService;
     }
 
     @Transactional
@@ -35,6 +37,7 @@ public class ProfileService {
         UUID id = UUID.fromString(jwt.getSubject());
         return profileRepository.findById(id)
                 .map(profile -> {
+                    progressionService.refreshUnlocks(profile);
                     profile.setEmail(normalizeEmail(jwt.getClaimAsString("email")));
                     profile.setLastActiveAt(Instant.now());
                     return DtoMapper.toProfileDto(profileRepository.save(profile), null);
@@ -87,7 +90,8 @@ public class ProfileService {
             profile.setUsername(username);
         }
         if (request.avatarUrl() != null) {
-            if (!request.avatarUrl().trim().isBlank() && profile.getCoins() < 5) {
+            progressionService.refreshUnlocks(profile);
+            if (!request.avatarUrl().trim().isBlank() && !profile.isProfilePhotoUnlocked()) {
                 throw new IllegalArgumentException("Profile photo unlock requires 5 coins");
             }
             profile.setAvatarUrl(request.avatarUrl().trim().isBlank() ? null : request.avatarUrl().trim());
@@ -110,9 +114,19 @@ public class ProfileService {
         UUID userId = Authz.requireUserId();
         Profile profile = profileRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
-        if (profile.getCoins() < 5) {
+        progressionService.refreshUnlocks(profile);
+        if (!profile.isIgrisUnlocked()) {
             throw new IllegalArgumentException("Igris unlock requires 5 coins");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Profile getCurrentProfile() {
+        UUID userId = Authz.requireUserId();
+        Profile profile = profileRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
+        progressionService.refreshUnlocks(profile);
+        return profile;
     }
 
     @Transactional(readOnly = true)

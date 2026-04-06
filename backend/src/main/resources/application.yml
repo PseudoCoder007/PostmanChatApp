@@ -40,6 +40,10 @@ spring:
         jwt:
           issuer-uri: ${SUPABASE_JWT_ISSUER:https://YOUR_PROJECT_REF.supabase.co/auth/v1}
 
+postman-chat:
+  storage:
+    base-url: ${STORAGE_BASE_URL:http://localhost:8080}
+
 management:
   endpoints:
     web:

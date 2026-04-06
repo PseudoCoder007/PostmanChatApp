@@ -51,6 +51,7 @@ public class PostmanChatProperties {
     public static class Storage {
         private String uploadDir = "backend/uploads";
         private long maxUploadBytes = 52_428_800L;
+        private String baseUrl = "http://localhost:8080";
 
         public String getUploadDir() {
             return uploadDir;
@@ -66,6 +67,14 @@ public class PostmanChatProperties {
 
         public void setMaxUploadBytes(long maxUploadBytes) {
             this.maxUploadBytes = maxUploadBytes;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
         }
     }
 }
