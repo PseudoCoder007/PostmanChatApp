@@ -13,7 +13,7 @@ ARG VITE_SUPABASE_STORAGE_BUCKET=chat-uploads
 ARG VITE_API_BASE_URL
 
 COPY frontend/package*.json frontend/
-RUN npm ci
+RUN npm install
 COPY frontend/ frontend/
 
 # Create .env file for build

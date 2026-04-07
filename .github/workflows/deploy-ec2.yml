@@ -38,8 +38,8 @@ jobs:
           docker build -t postman-chat \
             --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
             --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
-            --build-arg VITE_SUPABASE_STORAGE_BUCKET="${{ secrets.VITE_SUPABASE_STORAGE_BUCKET }}" \
-            --build-arg VITE_API_BASE_URL="http://13.201.50.166" \
+            --build-arg VITE_SUPABASE_STORAGE_BUCKET="chat-uploads" \
+            --build-arg VITE_API_BASE_URL="http://${{ secrets.EC2_HOST }}" \
             .
 
           # Run container (PUBLIC ACCESS)
@@ -55,5 +55,4 @@ jobs:
             -e IGRIS_NVIDIA_API_KEY="${{ secrets.IGRIS_NVIDIA_API_KEY }}" \
             postman-chat
 
-          # Reload nginx
-          #sudo systemctl reload nginx
+          
