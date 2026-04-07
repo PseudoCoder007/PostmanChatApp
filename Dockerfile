@@ -13,7 +13,9 @@ ARG VITE_SUPABASE_STORAGE_BUCKET=chat-uploads
 ARG VITE_API_BASE_URL
 
 COPY frontend/package*.json frontend/
+WORKDIR /app/frontend
 RUN npm install
+WORKDIR /app
 COPY frontend/ frontend/
 
 # Create .env file for build
@@ -22,7 +24,7 @@ RUN echo "VITE_SUPABASE_URL=${VITE_SUPABASE_URL}" > frontend/.env && \
     echo "VITE_SUPABASE_STORAGE_BUCKET=${VITE_SUPABASE_STORAGE_BUCKET}" >> frontend/.env && \
     echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" >> frontend/.env
 
-RUN npm run build
+RUN cd frontend && npm run build
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
