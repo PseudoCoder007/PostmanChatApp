@@ -9,7 +9,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Deploy to EC2
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to EC2 via SSH
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -17,13 +20,32 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
         script: |
-          cd /home/ubuntu/postman-chat
-          git pull origin main
-          docker build -t postman-chat .
+          cd ~
+
+          # Clone repo if not exists, else pull latest
+          if [ -d "postman-chat" ]; then
+            cd postman-chat && git pull origin main
+          else
+            git clone https://github.com/${{ github.repository }}.git postman-chat
+            cd postman-chat
+          fi
+
+          # Stop and remove old container
           docker stop postman-chat || true
           docker rm postman-chat || true
+
+          # Build new image with frontend env vars
+          docker build -t postman-chat \
+            --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
+            --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
+            --build-arg VITE_SUPABASE_STORAGE_BUCKET="${{ secrets.VITE_SUPABASE_STORAGE_BUCKET }}" \
+            --build-arg VITE_API_BASE_URL="http://13.201.50.166" \
+            .
+
+          # Run container (PUBLIC ACCESS)
           docker run -d --name postman-chat \
-            -p 127.0.0.1:8080:8080 \
+            -p 80:8080 \
+            --restart always \
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
             -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
@@ -32,4 +54,6 @@ jobs:
             -e STORAGE_BASE_URL="${{ secrets.STORAGE_BASE_URL }}" \
             -e IGRIS_NVIDIA_API_KEY="${{ secrets.IGRIS_NVIDIA_API_KEY }}" \
             postman-chat
-          sudo systemctl reload nginx
+
+          # Reload nginx
+          #sudo systemctl reload nginx

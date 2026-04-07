@@ -7,9 +7,21 @@ RUN mvn -f backend/pom.xml clean package -DskipTests
 
 FROM node:18 AS frontend-build
 WORKDIR /app
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_SUPABASE_STORAGE_BUCKET=chat-uploads
+ARG VITE_API_BASE_URL
+
 COPY frontend/package*.json frontend/
 RUN npm ci
 COPY frontend/ frontend/
+
+# Create .env file for build
+RUN echo "VITE_SUPABASE_URL=${VITE_SUPABASE_URL}" > frontend/.env && \
+    echo "VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}" >> frontend/.env && \
+    echo "VITE_SUPABASE_STORAGE_BUCKET=${VITE_SUPABASE_STORAGE_BUCKET}" >> frontend/.env && \
+    echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" >> frontend/.env
+
 RUN npm run build
 
 FROM eclipse-temurin:21-jre
