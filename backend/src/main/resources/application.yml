@@ -43,6 +43,18 @@ spring:
 postman-chat:
   storage:
     base-url: ${STORAGE_BASE_URL:http://localhost:8080}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  messages:
+    max-content-length: 8000
+  igris:
+    api-url: ${IGRIS_NVIDIA_API_URL:https://integrate.api.nvidia.com/v1/chat/completions}
+    api-key: ${IGRIS_NVIDIA_API_KEY:}
+    model: ${IGRIS_MODEL:meta/llama-3.1-70b-instruct}
+  notifications:
+    email:
+      enabled: ${EMAIL_NOTIFICATIONS_ENABLED:false}
+      from: ${EMAIL_FROM:no-reply@postmanchat.local}
 
 management:
   endpoints:
@@ -60,20 +72,6 @@ resilience4j:
         limit-for-period: 60
         limit-refresh-period: 1m
         timeout-duration: 0s
-
-postman-chat:
-  cors:
-    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
-  messages:
-    max-content-length: 8000
-  igris:
-    api-url: ${IGRIS_NVIDIA_API_URL:https://integrate.api.nvidia.com/v1/chat/completions}
-    api-key: ${IGRIS_NVIDIA_API_KEY:}
-    model: ${IGRIS_MODEL:meta/llama-3.1-70b-instruct}
-  notifications:
-    email:
-      enabled: ${EMAIL_NOTIFICATIONS_ENABLED:false}
-      from: ${EMAIL_FROM:no-reply@postmanchat.local}
 
 logging:
   level:
