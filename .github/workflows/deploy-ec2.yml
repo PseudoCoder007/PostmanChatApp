@@ -1,0 +1,35 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          cd /home/ubuntu/postman-chat
+          git pull origin main
+          docker build -t postman-chat .
+          docker stop postman-chat || true
+          docker rm postman-chat || true
+          docker run -d --name postman-chat \
+            -p 127.0.0.1:8080:8080 \
+            -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
+            -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            -e SUPABASE_JWT_ISSUER="${{ secrets.SUPABASE_JWT_ISSUER }}" \
+            -e CORS_ORIGINS="${{ secrets.CORS_ORIGINS }}" \
+            -e STORAGE_BASE_URL="${{ secrets.STORAGE_BASE_URL }}" \
+            -e IGRIS_NVIDIA_API_KEY="${{ secrets.IGRIS_NVIDIA_API_KEY }}" \
+            postman-chat
+          sudo systemctl reload nginx
