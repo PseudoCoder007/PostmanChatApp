@@ -329,10 +329,10 @@ export default function ChatPage() {
         ? res.reply
         : JSON.stringify(res.reply ?? 'Igris replied, but the response format was unexpected.');
       playUiTone('success');
-      setIgrisMessages((old) => [...old, { id: crypto.randomUUID(), role: 'user', content: message }, { id: crypto.randomUUID(), role: 'assistant', content: reply || 'Igris had a blank reply this time. Try again.' }]);
+      setIgrisMessages((old) => [...old, { id: createClientId(), role: 'user', content: message }, { id: createClientId(), role: 'assistant', content: reply || 'Igris had a blank reply this time. Try again.' }]);
       setIgrisDraft('');
     },
-    onError: (error: Error, message) => { toast.error(getUserFriendlyErrorMessage(error)); setIgrisMessages((old) => [...old, { id: crypto.randomUUID(), role: 'user', content: message }, { id: crypto.randomUUID(), role: 'assistant', content: String(getUserFriendlyErrorMessage(error)) }]); },
+    onError: (error: Error, message) => { toast.error(getUserFriendlyErrorMessage(error)); setIgrisMessages((old) => [...old, { id: createClientId(), role: 'user', content: message }, { id: createClientId(), role: 'assistant', content: String(getUserFriendlyErrorMessage(error)) }]); },
   });
 
   async function uploadProfilePhoto(file: File) {
@@ -698,6 +698,13 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 
 function readSoundPreference() {
   try { return window.localStorage.getItem('postmanchat.sound.enabled') !== '0'; } catch { return true; }
+}
+
+function createClientId() {
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `id_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function buildFocusMissions(input: { tick: number; canUseIgris: boolean; canChallengeFriends: boolean; activeQuestCount: number }): FocusMission[] {
