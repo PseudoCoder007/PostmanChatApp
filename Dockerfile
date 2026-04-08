@@ -1,10 +1,4 @@
 # Multi-stage build for Java + Node.js app
-FROM maven:3.9.9-eclipse-temurin-21 AS backend-build
-WORKDIR /app
-COPY backend/pom.xml backend/
-COPY backend/src backend/src
-RUN mvn -f backend/pom.xml clean package -DskipTests
-
 FROM node:18 AS frontend-build
 WORKDIR /app
 ARG VITE_SUPABASE_URL
@@ -26,9 +20,15 @@ RUN echo "VITE_SUPABASE_URL=${VITE_SUPABASE_URL}" > frontend/.env && \
 
 RUN cd frontend && npm run build
 
+FROM maven:3.9.9-eclipse-temurin-21 AS backend-build
+WORKDIR /app
+COPY backend/pom.xml backend/
+COPY backend/src backend/src
+COPY --from=frontend-build /app/frontend/dist/ backend/src/main/resources/static/
+RUN mvn -f backend/pom.xml clean package -DskipTests
+
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=backend-build /app/backend/target/*.jar app.jar
-COPY --from=frontend-build /app/frontend/dist frontend/
 EXPOSE 8080
 CMD ["java", "-jar", "app.jar"]
