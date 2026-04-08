@@ -53,6 +53,14 @@ jobs:
             -e CORS_ORIGINS="${{ secrets.CORS_ORIGINS }}" \
             -e STORAGE_BASE_URL="${{ secrets.STORAGE_BASE_URL }}" \
             -e IGRIS_NVIDIA_API_KEY="${{ secrets.IGRIS_NVIDIA_API_KEY }}" \
+            -e EMAIL_NOTIFICATIONS_ENABLED="${{ secrets.EMAIL_NOTIFICATIONS_ENABLED }}" \
+            -e EMAIL_FROM="${{ secrets.EMAIL_FROM }}" \
+            -e MAIL_HOST="${{ secrets.MAIL_HOST }}" \
+            -e MAIL_PORT="${{ secrets.MAIL_PORT }}" \
+            -e MAIL_USERNAME="${{ secrets.MAIL_USERNAME }}" \
+            -e MAIL_PASSWORD="${{ secrets.MAIL_PASSWORD }}" \
+            -e MAIL_SMTP_AUTH="${{ secrets.MAIL_SMTP_AUTH }}" \
+            -e MAIL_SMTP_STARTTLS="${{ secrets.MAIL_SMTP_STARTTLS }}" \
             postman-chat
 
           

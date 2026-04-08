@@ -27,6 +27,10 @@ public class Room {
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "visibility", nullable = false)
+    private RoomVisibility visibility = RoomVisibility.public_room;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -34,10 +38,15 @@ public class Room {
     }
 
     public Room(UUID id, String name, RoomType type, UUID createdBy) {
+        this(id, name, type, createdBy, RoomVisibility.public_room);
+    }
+
+    public Room(UUID id, String name, RoomType type, UUID createdBy, RoomVisibility visibility) {
         this.id = id;
         this.name = name;
         this.type = type;
         this.createdBy = createdBy;
+        this.visibility = visibility;
         this.createdAt = Instant.now();
     }
 
@@ -55,6 +64,10 @@ public class Room {
 
     public UUID getCreatedBy() {
         return createdBy;
+    }
+
+    public RoomVisibility getVisibility() {
+        return visibility;
     }
 
     public Instant getCreatedAt() {

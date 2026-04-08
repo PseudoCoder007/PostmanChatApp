@@ -35,4 +35,11 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
               AND LOWER(r.name) = LOWER(:name)
             """)
     boolean existsGroupByNameIgnoreCase(@Param("name") String name);
+
+    @Query("""
+            SELECT r FROM Room r
+            WHERE r.type = com.postmanchat.domain.RoomType.group
+            ORDER BY r.createdAt DESC
+            """)
+    List<Room> findAllGroupRooms();
 }

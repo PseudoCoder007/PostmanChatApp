@@ -16,15 +16,22 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
     setBusy(true);
-    const { error: err } = await supabase.auth.signUp({
-      email,
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error: err } = await supabase.auth.signUp({
+      email: normalizedEmail,
       password,
-      options: { data: { name: displayName || email.split('@')[0] } },
+      options: { data: { name: displayName || normalizedEmail.split('@')[0] } },
     });
     setBusy(false);
     if (err) {
       setError(err.message);
       toast.error(err.message);
+      return;
+    }
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      const duplicateMessage = 'An account with this email already exists. Please sign in instead.';
+      setError(duplicateMessage);
+      toast.error(duplicateMessage);
       return;
     }
     toast.success('Account created');

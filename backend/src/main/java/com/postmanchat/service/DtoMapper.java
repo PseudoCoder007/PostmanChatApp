@@ -36,8 +36,19 @@ public final class DtoMapper {
         );
     }
 
-    public static RoomDto toRoomDto(Room r, ProfileDto directPeer) {
-        return new RoomDto(r.getId(), r.getName(), r.getType(), r.getCreatedBy(), r.getCreatedAt(), directPeer);
+    public static RoomDto toRoomDto(Room r, ProfileDto directPeer, boolean member, String currentUserRole, long memberCount) {
+        return new RoomDto(
+                r.getId(),
+                r.getName(),
+                r.getType(),
+                r.getCreatedBy(),
+                r.getCreatedAt(),
+                directPeer,
+                r.getVisibility(),
+                member,
+                currentUserRole,
+                memberCount
+        );
     }
 
     public static MessageDto toAttachmentMessageDto(Message m, String senderDisplayName, String senderUsername, AttachmentDto attachment) {

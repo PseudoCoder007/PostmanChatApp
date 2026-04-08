@@ -1,15 +1,20 @@
 package com.postmanchat.service;
 
 import com.postmanchat.domain.Room;
+import com.postmanchat.domain.RoomJoinRequest;
+import com.postmanchat.domain.RoomJoinRequestId;
 import com.postmanchat.domain.RoomMember;
 import com.postmanchat.domain.RoomMemberId;
 import com.postmanchat.domain.RoomType;
+import com.postmanchat.domain.RoomVisibility;
 import com.postmanchat.repo.ProfileRepository;
+import com.postmanchat.repo.RoomJoinRequestRepository;
 import com.postmanchat.repo.RoomMemberRepository;
 import com.postmanchat.repo.RoomRepository;
 import com.postmanchat.web.Authz;
 import com.postmanchat.web.dto.CreateRoomRequest;
 import com.postmanchat.web.dto.ProfileDto;
+import com.postmanchat.web.dto.RoomJoinRequestDto;
 import com.postmanchat.web.dto.RoomDto;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -25,6 +30,7 @@ public class RoomService {
 
     private final RoomRepository roomRepository;
     private final RoomMemberRepository roomMemberRepository;
+    private final RoomJoinRequestRepository roomJoinRequestRepository;
     private final ProfileRepository profileRepository;
     private final ProfileService profileService;
     private final FriendService friendService;
@@ -34,6 +40,7 @@ public class RoomService {
     public RoomService(
             RoomRepository roomRepository,
             RoomMemberRepository roomMemberRepository,
+            RoomJoinRequestRepository roomJoinRequestRepository,
             ProfileRepository profileRepository,
             ProfileService profileService,
             FriendService friendService,
@@ -42,6 +49,7 @@ public class RoomService {
     ) {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
+        this.roomJoinRequestRepository = roomJoinRequestRepository;
         this.profileRepository = profileRepository;
         this.profileService = profileService;
         this.friendService = friendService;
@@ -54,6 +62,16 @@ public class RoomService {
         UUID userId = Authz.requireUserId();
         String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         return roomRepository.findRoomsForUser(userId).stream()
+                .map(room -> toRoomDto(room, userId))
+                .filter(room -> normalized.isBlank() || matchesSearch(room, normalized))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<RoomDto> discoverRooms(String query) {
+        UUID userId = Authz.requireUserId();
+        String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        return roomRepository.findAllGroupRooms().stream()
                 .map(room -> toRoomDto(room, userId))
                 .filter(room -> normalized.isBlank() || matchesSearch(room, normalized))
                 .toList();
@@ -85,7 +103,8 @@ public class RoomService {
         }
         progressionService.spendCoins(profile, 20);
         profileRepository.save(profile);
-        Room room = new Room(UUID.randomUUID(), name, type, userId);
+        RoomVisibility visibility = request.visibility() != null ? request.visibility() : RoomVisibility.public_room;
+        Room room = new Room(UUID.randomUUID(), name, type, userId, visibility);
         roomRepository.save(room);
         roomMemberRepository.save(new RoomMember(new RoomMemberId(room.getId(), userId), "owner"));
         questService.handleGroupRoomCreated(userId);
@@ -103,6 +122,104 @@ public class RoomService {
     public Room findRoom(UUID roomId) {
         return roomRepository.findById(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found"));
+    }
+
+    @Transactional
+    public RoomDto joinOrRequestAccess(UUID roomId) {
+        UUID userId = Authz.requireUserId();
+        Room room = findRoom(roomId);
+        if (room.getType() != RoomType.group) {
+            throw new IllegalArgumentException("Only group rooms can be joined");
+        }
+        if (roomMemberRepository.existsByIdRoomIdAndIdUserId(roomId, userId)) {
+            return toRoomDto(room, userId);
+        }
+        if (room.getVisibility() == RoomVisibility.public_room) {
+            roomMemberRepository.save(new RoomMember(new RoomMemberId(roomId, userId), "member"));
+            roomJoinRequestRepository.findByIdRoomIdAndIdUserId(roomId, userId).ifPresent(roomJoinRequestRepository::delete);
+            return toRoomDto(room, userId);
+        }
+        RoomJoinRequest existing = roomJoinRequestRepository.findByIdRoomIdAndIdUserId(roomId, userId)
+                .orElseGet(() -> new RoomJoinRequest(new RoomJoinRequestId(roomId, userId)));
+        existing.setStatus("pending");
+        existing.setReviewedAt(null);
+        existing.setReviewedBy(null);
+        roomJoinRequestRepository.save(existing);
+        return toRoomDto(room, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<RoomJoinRequestDto> listJoinRequests(UUID roomId) {
+        UUID userId = Authz.requireUserId();
+        assertOwner(roomId, userId);
+        return roomJoinRequestRepository.findByIdRoomIdAndStatusOrderByCreatedAtAsc(roomId, "pending").stream()
+                .map(request -> profileRepository.findById(request.getId().getUserId())
+                        .map(profile -> new RoomJoinRequestDto(
+                                roomId,
+                                DtoMapper.toProfileDto(profile, friendService.friendshipState(userId, profile.getId())),
+                                request.getStatus(),
+                                request.getCreatedAt()
+                        ))
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    @Transactional
+    public RoomDto approveJoinRequest(UUID roomId, UUID targetUserId) {
+        UUID userId = Authz.requireUserId();
+        assertOwner(roomId, userId);
+        Room room = findRoom(roomId);
+        RoomJoinRequest request = roomJoinRequestRepository.findByIdRoomIdAndIdUserId(roomId, targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Join request not found"));
+        request.setStatus("approved");
+        request.setReviewedAt(java.time.Instant.now());
+        request.setReviewedBy(userId);
+        roomJoinRequestRepository.save(request);
+        if (!roomMemberRepository.existsByIdRoomIdAndIdUserId(roomId, targetUserId)) {
+            roomMemberRepository.save(new RoomMember(new RoomMemberId(roomId, targetUserId), "member"));
+        }
+        return toRoomDto(room, targetUserId);
+    }
+
+    @Transactional
+    public void rejectJoinRequest(UUID roomId, UUID targetUserId) {
+        UUID userId = Authz.requireUserId();
+        assertOwner(roomId, userId);
+        RoomJoinRequest request = roomJoinRequestRepository.findByIdRoomIdAndIdUserId(roomId, targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("Join request not found"));
+        request.setStatus("rejected");
+        request.setReviewedAt(java.time.Instant.now());
+        request.setReviewedBy(userId);
+        roomJoinRequestRepository.save(request);
+    }
+
+    @Transactional
+    public RoomDto addMember(UUID roomId, UUID targetUserId) {
+        UUID userId = Authz.requireUserId();
+        assertOwner(roomId, userId);
+        Room room = findRoom(roomId);
+        if (room.getType() != RoomType.group) {
+            throw new IllegalArgumentException("Only group rooms support member invites");
+        }
+        profileRepository.findById(targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if (!friendService.areFriends(userId, targetUserId)) {
+            throw new IllegalArgumentException("You can only add accepted friends");
+        }
+        if (!roomMemberRepository.existsByIdRoomIdAndIdUserId(roomId, targetUserId)) {
+            roomMemberRepository.save(new RoomMember(new RoomMemberId(roomId, targetUserId), "member"));
+        }
+        roomJoinRequestRepository.findByIdRoomIdAndIdUserId(roomId, targetUserId).ifPresent(roomJoinRequestRepository::delete);
+        return toRoomDto(room, targetUserId);
+    }
+
+    private void assertOwner(UUID roomId, UUID userId) {
+        RoomMember member = roomMemberRepository.findByIdRoomIdAndIdUserId(roomId, userId)
+                .orElseThrow(() -> new AccessDeniedException("Not a member of this room"));
+        if (!"owner".equalsIgnoreCase(member.getRole())) {
+            throw new AccessDeniedException("Only the room owner can manage access");
+        }
     }
 
     private RoomDto createDirectRoom(UUID userId, UUID targetUserId) {
@@ -125,7 +242,7 @@ public class RoomService {
         ProfileDto targetProfile = profileRepository.findById(targetUserId)
                 .map(profile -> DtoMapper.toProfileDto(profile, "accepted"))
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        Room room = new Room(UUID.randomUUID(), targetProfile.displayName(), RoomType.direct, userId);
+        Room room = new Room(UUID.randomUUID(), targetProfile.displayName(), RoomType.direct, userId, RoomVisibility.private_room);
         roomRepository.save(room);
         roomMemberRepository.save(new RoomMember(new RoomMemberId(room.getId(), userId), "owner"));
         roomMemberRepository.save(new RoomMember(new RoomMemberId(room.getId(), targetUserId), "member"));
@@ -134,6 +251,11 @@ public class RoomService {
 
     private RoomDto toRoomDto(Room room, UUID currentUserId) {
         ProfileDto directPeer = null;
+        boolean member = roomMemberRepository.existsByIdRoomIdAndIdUserId(room.getId(), currentUserId);
+        String currentUserRole = roomMemberRepository.findByIdRoomIdAndIdUserId(room.getId(), currentUserId)
+                .map(RoomMember::getRole)
+                .orElse(null);
+        long memberCount = roomMemberRepository.countByIdRoomId(room.getId());
         if (room.getType() == RoomType.direct) {
             directPeer = roomMemberRepository.findByIdRoomId(room.getId()).stream()
                     .map(RoomMember::getId)
@@ -144,7 +266,7 @@ public class RoomService {
                     .map(profile -> DtoMapper.toProfileDto(profile, "accepted"))
                     .orElse(null);
         }
-        return DtoMapper.toRoomDto(room, directPeer);
+        return DtoMapper.toRoomDto(room, directPeer, member, currentUserRole, memberCount);
     }
 
     private static boolean matchesSearch(RoomDto room, String normalized) {

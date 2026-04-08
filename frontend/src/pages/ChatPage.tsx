@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { useTutorial } from '@/hooks/useTutorial';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { LevelUpCelebration } from '@/components/LevelUpCelebration';
-import type { Attachment, FriendRequest, IgrisChatResponse, IgrisChatTurn, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, WsMessagePayload } from '@/types/chat';
+import type { Attachment, FriendRequest, IgrisChatResponse, IgrisChatTurn, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomVisibility, WsMessagePayload } from '@/types/chat';
 
 type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile';
 type IgrisMessage = { id: string; role: 'user' | 'assistant'; content: string };
@@ -36,14 +36,15 @@ export default function ChatPage() {
   const lastNotificationRef = useRef<string | null>(null);
   const previousMessageCountRef = useRef(0);
   const previousUnreadCountRef = useRef(0);
-  const previousLevelRef = useRef<number | null>(null);
   const [levelUpCelebration, setLevelUpCelebration] = useState<{ oldLevel: number; newLevel: number; title: string } | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>('chat');
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [draft, setDraft] = useState('');
   const [groupName, setGroupName] = useState('');
+  const [groupVisibility, setGroupVisibility] = useState<RoomVisibility>('public_room');
   const [roomSearch, setRoomSearch] = useState('');
   const [peopleSearch, setPeopleSearch] = useState('');
+  const [inviteUserId, setInviteUserId] = useState('');
   const [profileForm, setProfileForm] = useState({ displayName: '', username: '', avatarUrl: '' });
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -54,13 +55,11 @@ export default function ChatPage() {
   const [igrisMessages, setIgrisMessages] = useState<IgrisMessage[]>([
     { id: 'intro', role: 'assistant', content: 'Igris online. I can be your funny low-key therapist friend, boredom killer, comeback coach, or chaos planner. Tell me the lore.' },
   ]);
-  const bucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || 'chat-uploads';
-
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: async () => json<Profile>(await apiFetch('/api/me')), staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: allRooms = [] } = useQuery({ queryKey: ['rooms'], queryFn: async () => json<Room[]>(await apiFetch('/api/rooms')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
-  const { data: searchedRooms = [] } = useQuery({
-    queryKey: ['rooms', roomSearch],
-    queryFn: async () => json<Room[]>(await apiFetch(`/api/rooms?${new URLSearchParams({ query: roomSearch.trim() })}`)),
+  const { data: discoverRooms = [] } = useQuery({
+    queryKey: ['rooms', 'discover', roomSearch],
+    queryFn: async () => json<Room[]>(await apiFetch(`/api/rooms/discover?${new URLSearchParams({ query: roomSearch.trim() })}`)),
     enabled: !!me && roomSearch.trim().length > 0,
     staleTime: 60000,
     refetchOnWindowFocus: false,
@@ -91,6 +90,14 @@ export default function ChatPage() {
     queryKey: ['messages', activeRoomId],
     queryFn: async () => json<Message[]>(await apiFetch(`/api/rooms/${activeRoomId}/messages?limit=80`)),
     enabled: !!me && !!activeRoomId,
+    staleTime: 15000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const { data: joinRequests = [] } = useQuery({
+    queryKey: ['room-requests', activeRoomId],
+    queryFn: async () => json<RoomJoinRequest[]>(await apiFetch(`/api/rooms/${activeRoomId}/requests`)),
+    enabled: !!me && !!activeRoomId && !!allRooms.find((room) => room.id === activeRoomId && room.currentUserRole === 'owner'),
     staleTime: 15000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -133,7 +140,10 @@ export default function ChatPage() {
   }, [notifications]);
 
   const orderedMessages = useMemo(() => [...messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [messages]);
-  const visibleRooms = roomSearch.trim() ? searchedRooms : allRooms;
+  const visibleRooms = allRooms;
+  const discoverableRooms = roomSearch.trim()
+    ? discoverRooms.filter((room) => !allRooms.some((ownRoom) => ownRoom.id === room.id))
+    : [];
   const incoming = friendships.filter((item) => item.friendshipState === 'incoming');
   const friends = friendships.filter((item) => item.friendshipState === 'accepted');
   const onlineFriends = friends.filter((item) => item.profile.active);
@@ -181,17 +191,23 @@ export default function ChatPage() {
     }
   }, [tutorial.currentStep?.id]);
 
-  // Level-up celebration
   useEffect(() => {
-    if (me?.level && previousLevelRef.current && me.level > previousLevelRef.current) {
-      const oldLevel = previousLevelRef.current;
-      const newLevel = me.level;
-      const newTitle = me.title || 'Player';
-      setLevelUpCelebration({ oldLevel, newLevel, title: newTitle });
-      if (soundEnabled) playUiTone('success');
+    if (!me?.id || !me.level) return;
+    const storageKey = `postmanchat.level.seen.${me.id}`;
+    try {
+      const storedValue = window.localStorage.getItem(storageKey);
+      const seenLevel = storedValue ? Number.parseInt(storedValue, 10) : me.level;
+
+      if (Number.isFinite(seenLevel) && me.level > seenLevel) {
+        setLevelUpCelebration({ oldLevel: seenLevel, newLevel: me.level, title: me.title || 'Player' });
+        if (soundEnabled) playUiTone('success');
+      }
+
+      window.localStorage.setItem(storageKey, String(me.level));
+    } catch {
+      // Ignore storage failures; the celebration simply won't persist across refreshes.
     }
-    previousLevelRef.current = me?.level ?? 1;
-  }, [me?.level, soundEnabled]);
+  }, [me?.id, me?.level, me?.title, soundEnabled]);
 
   function onWsEvent(payload: WsMessagePayload) {
     if (!activeRoomId || payload.message.roomId !== activeRoomId) return;
@@ -206,49 +222,80 @@ export default function ChatPage() {
 
   useStompRoom(activeRoomId, onWsEvent);
 
-  const invalidateCore = () => {
-    qc.invalidateQueries({ queryKey: ['me'] });
-    qc.invalidateQueries({ queryKey: ['rooms'] });
-    qc.invalidateQueries({ queryKey: ['friends'] });
-    qc.invalidateQueries({ queryKey: ['profiles'] });
-    qc.invalidateQueries({ queryKey: ['quests'] });
-    qc.invalidateQueries({ queryKey: ['leaderboard'] });
-    qc.invalidateQueries({ queryKey: ['notifications'] });
+  const refreshCore = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['me'], refetchType: 'active' }),
+      qc.invalidateQueries({ queryKey: ['rooms'], refetchType: 'active' }),
+      qc.invalidateQueries({ queryKey: ['friends'], refetchType: 'active' }),
+      qc.invalidateQueries({ queryKey: ['profiles'], refetchType: 'active' }),
+      qc.invalidateQueries({ queryKey: ['quests'], refetchType: 'active' }),
+      qc.invalidateQueries({ queryKey: ['leaderboard'], refetchType: 'active' }),
+      qc.invalidateQueries({ queryKey: ['notifications'], refetchType: 'active' }),
+    ]);
   };
 
   const updateProfile = useMutation({
     mutationFn: async (nextProfileForm: typeof profileForm) => json<Profile>(await apiFetch('/api/me', { method: 'PATCH', body: JSON.stringify(nextProfileForm) })),
-    onSuccess: () => { toast.success('Profile updated'); invalidateCore(); },
+    onSuccess: async () => { toast.success('Profile updated'); await refreshCore(); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const generateQuest = useMutation({
     mutationFn: async () => json<Quest>(await apiFetch('/api/quests/random', { method: 'POST' })),
-    onSuccess: () => { playUiTone('success'); toast.success('New mission generated'); invalidateCore(); setActiveView('quests'); },
+    onSuccess: async () => { playUiTone('success'); toast.success('New mission generated'); await refreshCore(); setActiveView('quests'); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const challengeFriend = useMutation({
     mutationFn: async ({ targetUserId }: { targetUserId: string }) => json<Quest>(await apiFetch(`/api/quests/friends/${targetUserId}/random`, { method: 'POST' })),
-    onSuccess: () => { playUiTone('success'); toast.success('Friend quest sent'); invalidateCore(); setActiveView('quests'); },
+    onSuccess: async () => { playUiTone('success'); toast.success('Friend quest sent'); await refreshCore(); setActiveView('quests'); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const createGroupRoom = useMutation({
-    mutationFn: async ({ name }: { name: string }) => json<Room>(await apiFetch('/api/rooms', { method: 'POST', body: JSON.stringify({ name, type: 'group', targetUserId: null }) })),
-    onSuccess: (room) => { playUiTone('success'); toast.success('Room deployed'); invalidateCore(); setGroupName(''); setActiveRoomId(room.id); setActiveView('chat'); },
+    mutationFn: async ({ name, visibility }: { name: string; visibility: RoomVisibility }) => json<Room>(await apiFetch('/api/rooms', { method: 'POST', body: JSON.stringify({ name, type: 'group', targetUserId: null, visibility }) })),
+    onSuccess: async (room) => { playUiTone('success'); toast.success('Room deployed'); await refreshCore(); setGroupName(''); setGroupVisibility('public_room'); setActiveRoomId(room.id); setActiveView('chat'); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const addFriend = useMutation({
     mutationFn: async ({ targetUserId }: { targetUserId: string }) => json<FriendRequest>(await apiFetch(`/api/friends/${targetUserId}/request`, { method: 'POST' })),
-    onSuccess: () => { toast.success('Friend request sent'); invalidateCore(); },
+    onSuccess: async () => { toast.success('Friend request sent'); await refreshCore(); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const acceptFriend = useMutation({
     mutationFn: async ({ otherUserId }: { otherUserId: string }) => json<FriendRequest>(await apiFetch(`/api/friends/${otherUserId}/accept`, { method: 'POST' })),
-    onSuccess: () => { toast.success('Friend request accepted'); invalidateCore(); },
+    onSuccess: async () => { toast.success('Friend request accepted'); await refreshCore(); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const createDirectRoom = useMutation({
     mutationFn: async ({ targetUserId }: { targetUserId: string }) => json<Room>(await apiFetch('/api/rooms', { method: 'POST', body: JSON.stringify({ name: '', type: 'direct', targetUserId }) })),
-    onSuccess: (room) => { playUiTone('success'); toast.success('Direct room opened'); invalidateCore(); setPeopleSearch(''); setActiveRoomId(room.id); setActiveView('chat'); },
+    onSuccess: async (room) => { playUiTone('success'); toast.success('Direct room opened'); await refreshCore(); setPeopleSearch(''); setActiveRoomId(room.id); setActiveView('chat'); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const joinRoom = useMutation({
+    mutationFn: async ({ roomId }: { roomId: string }) => json<Room>(await apiFetch(`/api/rooms/${roomId}/join`, { method: 'POST' })),
+    onSuccess: async (room) => {
+      await refreshCore();
+      if (room.member) {
+        toast.success(`Joined ${getRoomTitle(room)}`);
+        setActiveRoomId(room.id);
+        setActiveView('chat');
+      } else {
+        toast.success('Access request sent');
+      }
+    },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const addRoomMember = useMutation({
+    mutationFn: async ({ roomId, targetUserId }: { roomId: string; targetUserId: string }) => json<Room>(await apiFetch(`/api/rooms/${roomId}/members?${new URLSearchParams({ targetUserId })}`, { method: 'POST' })),
+    onSuccess: async () => { await refreshCore(); setInviteUserId(''); toast.success('Member added'); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const approveJoinRequest = useMutation({
+    mutationFn: async ({ roomId, userId }: { roomId: string; userId: string }) => json<Room>(await apiFetch(`/api/rooms/${roomId}/requests/${userId}/approve`, { method: 'POST' })),
+    onSuccess: async () => { await refreshCore(); qc.invalidateQueries({ queryKey: ['room-requests'], refetchType: 'active' }); toast.success('Request approved'); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const rejectJoinRequest = useMutation({
+    mutationFn: async ({ roomId, userId }: { roomId: string; userId: string }) => apiFetch(`/api/rooms/${roomId}/requests/${userId}/reject`, { method: 'POST' }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['room-requests'] }); toast.success('Request rejected'); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
 
@@ -259,34 +306,12 @@ export default function ChatPage() {
   }
 
   const uploadAttachment = useMutation({
-    mutationFn: async (file: File) => {
-      if (file.size === 0) {
-        throw new Error('Selected attachment is empty. Choose a different file.');
-      }
-
-      const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
-      const objectPath = `attachments/${crypto.randomUUID()}.${ext}`;
-      const uploaded = await supabase.storage.from(bucket).upload(objectPath, file, { cacheControl: '3600', upsert: false, contentType: file.type || guessFileType(file.name) });
-      if (uploaded.error) {
-        return uploadAttachmentToBackend(file);
-      }
-
-      const publicUrl = supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
-      if (!publicUrl) {
-        return uploadAttachmentToBackend(file);
-      }
-
-      try {
-        return json<Attachment>(await apiFetch('/api/attachments/register', { method: 'POST', body: JSON.stringify({ originalName: file.name, storedName: objectPath, contentType: file.type || guessFileType(file.name), sizeBytes: file.size, publicUrl }) }));
-      } catch (error) {
-        return uploadAttachmentToBackend(file);
-      }
-    },
+    mutationFn: async (file: File) => uploadAttachmentToBackend(file),
   });
   const sendMessage = useMutation({
     mutationFn: async ({ roomId, content, attachmentId }: { roomId: string; content: string; attachmentId: string | null }) =>
       json<Message>(await apiFetch(`/api/rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify({ content, replyTo: null, attachmentId }) })),
-    onSuccess: () => { playUiTone('send'); setDraft(''); setSelectedFile(null); setUploadWarning(null); void refetchMessages(); invalidateCore(); },
+    onSuccess: async () => { playUiTone('send'); setDraft(''); setSelectedFile(null); setUploadWarning(null); void refetchMessages(); await refreshCore(); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const markNotificationRead = useMutation({
@@ -299,7 +324,14 @@ export default function ChatPage() {
       const history: IgrisChatTurn[] = igrisMessages.slice(-6).map((item) => ({ role: item.role, content: item.content }));
       return json<IgrisChatResponse>(await apiFetch('/api/igris/chat', { method: 'POST', body: JSON.stringify({ message, history }) }));
     },
-    onSuccess: (res, message) => { playUiTone('success'); setIgrisMessages((old) => [...old, { id: crypto.randomUUID(), role: 'user', content: message }, { id: crypto.randomUUID(), role: 'assistant', content: res.reply }]); setIgrisDraft(''); },
+    onSuccess: (res, message) => {
+      const reply = typeof res.reply === 'string'
+        ? res.reply
+        : JSON.stringify(res.reply ?? 'Igris replied, but the response format was unexpected.');
+      playUiTone('success');
+      setIgrisMessages((old) => [...old, { id: crypto.randomUUID(), role: 'user', content: message }, { id: crypto.randomUUID(), role: 'assistant', content: reply || 'Igris had a blank reply this time. Try again.' }]);
+      setIgrisDraft('');
+    },
     onError: (error: Error, message) => { toast.error(getUserFriendlyErrorMessage(error)); setIgrisMessages((old) => [...old, { id: crypto.randomUUID(), role: 'user', content: message }, { id: crypto.randomUUID(), role: 'assistant', content: String(getUserFriendlyErrorMessage(error)) }]); },
   });
 
@@ -313,17 +345,10 @@ export default function ChatPage() {
     if (file.size > 10 * 1024 * 1024) {
       throw new Error('Profile photo must be smaller than 10 MB');
     }
-    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'png';
-    const objectPath = `avatars/${me?.id ?? crypto.randomUUID()}.${ext}`;
-    const uploaded = await supabase.storage.from(bucket).upload(objectPath, file, {
-      cacheControl: '3600',
-      upsert: true,
-      contentType: file.type || 'image/png',
-    });
-    if (uploaded.error) {
-      throw new Error(uploaded.error.message);
-    }
-    return supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const profile = await json<Profile>(await apiFetchForm('/api/me/avatar', form, { method: 'POST' }));
+    return profile.avatarUrl ?? '';
   }
 
   async function signOut() {
@@ -395,17 +420,44 @@ export default function ChatPage() {
           <div className="player-card"><div className="avatar-plate">{initials(me?.displayName ?? 'User')}</div><div><strong>{me?.displayName ?? 'Loading...'}</strong><div className="muted-line">@{me?.username ?? 'username'}</div><div className="muted-line">{me?.xp ?? 0} XP - {me?.title ?? 'Newbie'}</div></div></div>
           <div className="panel-group">
             <div className="section-header compact"><div><span className="eyebrow">Channels</span><h3>Rooms and DMs</h3></div><span className="metric-badge">{visibleRooms.length}</span></div>
-            <input className="chat-input" value={roomSearch} onChange={(e) => setRoomSearch(e.target.value)} placeholder="Search channels" />
+            <input className="chat-input" value={roomSearch} onChange={(e) => setRoomSearch(e.target.value)} placeholder="Search your rooms or discover public/private groups" />
             <div className="room-stack">
-              {visibleRooms.map((room) => <button key={room.id} type="button" className={`room-tile ${room.id === activeRoomId ? 'active' : ''}`} onClick={() => setActiveRoomId(room.id)}><div className="room-tile-row"><strong>{getRoomTitle(room)}</strong><span className={`type-pill ${room.type}`}>{room.type === 'direct' ? 'DM' : 'Squad'}</span></div><span>{room.type === 'direct' ? `Private line with ${room.directPeer?.displayName ?? 'friend'}` : 'Shared team channel'}</span></button>)}
-              {visibleRooms.length === 0 ? <div className="empty-card">No channels match your search.</div> : null}
+              {visibleRooms.map((room) => <button key={room.id} type="button" className={`room-tile ${room.id === activeRoomId ? 'active' : ''}`} onClick={() => setActiveRoomId(room.id)}><div className="room-tile-row"><strong>{getRoomTitle(room)}</strong><span className={`type-pill ${room.type}`}>{room.type === 'direct' ? 'DM' : room.visibility === 'public_room' ? 'Public' : 'Private'}</span></div><span>{room.type === 'direct' ? `Private line with ${room.directPeer?.displayName ?? 'friend'}` : `${room.memberCount} member${room.memberCount === 1 ? '' : 's'} in this room`}</span></button>)}
+              {visibleRooms.length === 0 ? <div className="empty-card">No rooms yet. Create one or search to discover community spaces.</div> : null}
             </div>
+            {roomSearch.trim() ? (
+              <div className="panel-group">
+                <div className="section-header compact"><div><span className="eyebrow">Discover</span><h3>Search results</h3></div><span className="metric-badge">{discoverableRooms.length}</span></div>
+                <div className="room-stack">
+                  {discoverableRooms.map((room) => <div key={room.id} className="room-tile"><div className="room-tile-row"><strong>{getRoomTitle(room)}</strong><span className={`type-pill ${room.type}`}>{room.visibility === 'public_room' ? 'Public' : 'Private'}</span></div><span>{room.visibility === 'public_room' ? 'Join instantly' : 'Request owner approval'} · {room.memberCount} member{room.memberCount === 1 ? '' : 's'}</span><div className="inline-actions"><button type="button" className="btn" disabled={joinRoom.isPending} onClick={() => joinRoom.mutate({ roomId: room.id })}>{room.visibility === 'public_room' ? 'Join room' : 'Request access'}</button></div></div>)}
+                  {discoverableRooms.length === 0 ? <div className="empty-card">No discoverable rooms matched that search.</div> : null}
+                </div>
+              </div>
+            ) : null}
+            {activeRoom?.type === 'group' && activeRoom.currentUserRole === 'owner' ? (
+              <div className="panel-group">
+                <div className="section-header compact"><div><span className="eyebrow">Access</span><h3>Owner controls</h3></div><span className="metric-badge">{joinRequests.length} pending</span></div>
+                <select className="chat-input" value={inviteUserId} onChange={(e) => setInviteUserId(e.target.value)}>
+                  <option value="">Invite a friend to this room</option>
+                  {friends.map((item) => <option key={item.profile.id} value={item.profile.id}>{item.profile.displayName} (@{item.profile.username})</option>)}
+                </select>
+                <button type="button" className="btn" disabled={!inviteUserId || addRoomMember.isPending} onClick={() => activeRoomId && addRoomMember.mutate({ roomId: activeRoomId, targetUserId: inviteUserId })}>Add friend to room</button>
+                <div className="list-stack">
+                  {joinRequests.map((request) => <div key={request.profile.id} className="entity-row"><div><strong>{request.profile.displayName}</strong><div className="muted-line">@{request.profile.username}</div></div><div className="inline-actions"><button type="button" className="btn" disabled={approveJoinRequest.isPending} onClick={() => activeRoomId && approveJoinRequest.mutate({ roomId: activeRoomId, userId: request.profile.id })}>Approve</button><button type="button" className="btn btn-secondary" disabled={rejectJoinRequest.isPending} onClick={() => activeRoomId && rejectJoinRequest.mutate({ roomId: activeRoomId, userId: request.profile.id })}>Reject</button></div></div>)}
+                  {joinRequests.length === 0 ? <div className="empty-card">No pending room access requests.</div> : null}
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="panel-group">
             <div className="section-header compact"><div><span className="eyebrow">Deploy</span><h3>New squad room</h3></div><span className="metric-badge">20 coins</span></div>
             <input className="chat-input" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Create a dramatic room name" />
-            <button type="button" className="btn" disabled={createGroupRoom.isPending || !groupName.trim()} onClick={() => createGroupRoom.mutate({ name: groupName.trim() })}>Create room</button>
-            {createGroupRoom.error ? <div className="error">{getUserFriendlyErrorMessage(createGroupRoom.error)}</div> : <div className="muted-line">Group room creation costs 20 coins.</div>}
+            <select className="chat-input" value={groupVisibility} onChange={(e) => setGroupVisibility(e.target.value as RoomVisibility)}>
+              <option value="public_room">Public room: anyone can join from search</option>
+              <option value="private_room">Private room: users request access or owner adds them</option>
+            </select>
+            <button type="button" className="btn" disabled={createGroupRoom.isPending || !groupName.trim()} onClick={() => createGroupRoom.mutate({ name: groupName.trim(), visibility: groupVisibility })}>Create room</button>
+            {createGroupRoom.error ? <div className="error">{getUserFriendlyErrorMessage(createGroupRoom.error)}</div> : <div className="muted-line">Group room creation costs 20 coins. Public rooms are discoverable; private rooms support owner approval.</div>}
           </div>
         </aside>
 
@@ -706,20 +758,6 @@ function initials(value: string) {
 
 function formatTime(value: string) {
   return new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-}
-
-function guessFileType(name: string) {
-  const lower = name.toLowerCase();
-  if (lower.endsWith('.pdf')) return 'application/pdf';
-  if (lower.endsWith('.doc')) return 'application/msword';
-  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  if (lower.endsWith('.xls')) return 'application/vnd.ms-excel';
-  if (lower.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  if (lower.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
-  if (lower.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-  if (lower.endsWith('.txt')) return 'text/plain';
-  if (lower.endsWith('.zip')) return 'application/zip';
-  return 'application/octet-stream';
 }
 
 function fileBadge(name: string) {

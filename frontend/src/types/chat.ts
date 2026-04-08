@@ -1,4 +1,5 @@
 export type RoomType = 'direct' | 'group';
+export type RoomVisibility = 'public_room' | 'private_room';
 
 export interface Profile {
   id: string;
@@ -25,6 +26,10 @@ export interface Room {
   createdBy: string;
   createdAt: string;
   directPeer: Profile | null;
+  visibility: RoomVisibility;
+  member: boolean;
+  currentUserRole: string | null;
+  memberCount: number;
 }
 
 export interface Message {
@@ -43,6 +48,13 @@ export interface Message {
 export interface FriendRequest {
   profile: Profile;
   friendshipState: 'incoming' | 'outgoing' | 'accepted' | 'none';
+  createdAt: string;
+}
+
+export interface RoomJoinRequest {
+  roomId: string;
+  profile: Profile;
+  status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
 }
 

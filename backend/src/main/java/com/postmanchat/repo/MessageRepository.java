@@ -15,10 +15,20 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     @Query("""
             SELECT m FROM Message m
             WHERE m.roomId = :roomId
-            AND (:before IS NULL OR m.createdAt < :before)
             ORDER BY m.createdAt DESC
             """)
     List<Message> findPageForRoom(
+            @Param("roomId") UUID roomId,
+            Pageable pageable
+    );
+
+    @Query("""
+            SELECT m FROM Message m
+            WHERE m.roomId = :roomId
+            AND m.createdAt < :before
+            ORDER BY m.createdAt DESC
+            """)
+    List<Message> findPageForRoomBefore(
             @Param("roomId") UUID roomId,
             @Param("before") Instant before,
             Pageable pageable

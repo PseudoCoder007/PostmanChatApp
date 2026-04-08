@@ -25,11 +25,13 @@ public class ProfileService {
     private final ProfileRepository profileRepository;
     private final FriendService friendService;
     private final ProgressionService progressionService;
+    private final AttachmentService attachmentService;
 
-    public ProfileService(ProfileRepository profileRepository, FriendService friendService, ProgressionService progressionService) {
+    public ProfileService(ProfileRepository profileRepository, FriendService friendService, ProgressionService progressionService, AttachmentService attachmentService) {
         this.profileRepository = profileRepository;
         this.friendService = friendService;
         this.progressionService = progressionService;
+        this.attachmentService = attachmentService;
     }
 
     @Transactional
@@ -96,6 +98,28 @@ public class ProfileService {
             }
             profile.setAvatarUrl(request.avatarUrl().trim().isBlank() ? null : request.avatarUrl().trim());
         }
+        profile.setLastActiveAt(Instant.now());
+        return DtoMapper.toProfileDto(profileRepository.save(profile), null);
+    }
+
+    @Transactional
+    public ProfileDto uploadCurrentAvatar(org.springframework.web.multipart.MultipartFile file) {
+        UUID userId = Authz.requireUserId();
+        Profile profile = profileRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
+        progressionService.refreshUnlocks(profile);
+        if (!profile.isProfilePhotoUnlocked()) {
+            throw new IllegalArgumentException("Profile photo unlock requires 5 coins");
+        }
+        String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
+        if (!contentType.startsWith("image/")) {
+            throw new IllegalArgumentException("Profile photo must be an image");
+        }
+        if (file.getSize() > 10 * 1024 * 1024L) {
+            throw new IllegalArgumentException("Profile photo must be smaller than 10 MB");
+        }
+        String avatarUrl = attachmentService.storePublicFile(file, "avatar");
+        profile.setAvatarUrl(avatarUrl);
         profile.setLastActiveAt(Instant.now());
         return DtoMapper.toProfileDto(profileRepository.save(profile), null);
     }

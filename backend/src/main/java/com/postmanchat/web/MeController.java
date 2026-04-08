@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/me")
@@ -34,5 +36,10 @@ public class MeController {
     @PostMapping("/presence")
     public void presence() {
         profileService.touchPresence();
+    }
+
+    @PostMapping("/avatar")
+    public ProfileDto uploadAvatar(@RequestParam("file") MultipartFile file) {
+        return profileService.uploadCurrentAvatar(file);
     }
 }

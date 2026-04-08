@@ -3,7 +3,7 @@
  */
 export function getUserFriendlyErrorMessage(error: unknown): string {
   if (error instanceof Error) {
-    const message = error.message;
+    const message = normalizeProblemDetail(error.message);
 
     // Handle specific error patterns
     if (message.includes('403')) {
@@ -63,4 +63,17 @@ export function getUserFriendlyErrorMessage(error: unknown): string {
   }
 
   return 'An unexpected error occurred.';
+}
+
+function normalizeProblemDetail(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed.startsWith('{')) {
+    return trimmed;
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as { detail?: string; title?: string };
+    return parsed.detail || parsed.title || trimmed;
+  } catch {
+    return trimmed;
+  }
 }

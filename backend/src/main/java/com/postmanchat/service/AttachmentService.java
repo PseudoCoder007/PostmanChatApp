@@ -51,11 +51,32 @@ public class AttachmentService {
                     storedName,
                     file.getContentType() == null ? "application/octet-stream" : file.getContentType(),
                     file.getSize(),
-                    properties.getStorage().getBaseUrl() + "/uploads/" + storedName
+                    "/uploads/" + storedName
             ));
             return toDto(saved);
         } catch (IOException ex) {
             throw new IllegalArgumentException("Failed to store attachment");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public String storePublicFile(MultipartFile file, String prefix) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("File is required");
+        }
+        if (file.getSize() > properties.getStorage().getMaxUploadBytes()) {
+            throw new IllegalArgumentException("Attachment is larger than 50 MB");
+        }
+        try {
+            Path uploadDir = Path.of(properties.getStorage().getUploadDir()).toAbsolutePath().normalize();
+            Files.createDirectories(uploadDir);
+            String originalName = file.getOriginalFilename() == null ? "file" : file.getOriginalFilename();
+            String storedName = prefix + "_" + UUID.randomUUID() + "_" + originalName.replaceAll("[^A-Za-z0-9._-]", "_");
+            Path target = uploadDir.resolve(storedName);
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+            return "/uploads/" + storedName;
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Failed to store file");
         }
     }
 

@@ -4,6 +4,7 @@ import com.postmanchat.service.MessageService;
 import com.postmanchat.service.RoomService;
 import com.postmanchat.web.dto.CreateRoomRequest;
 import com.postmanchat.web.dto.MessageDto;
+import com.postmanchat.web.dto.RoomJoinRequestDto;
 import com.postmanchat.web.dto.RoomDto;
 import com.postmanchat.web.dto.SendMessageRequest;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -37,9 +38,39 @@ public class RoomController {
         return roomService.listMyRooms(query);
     }
 
+    @GetMapping("/discover")
+    public List<RoomDto> discoverRooms(@RequestParam(required = false) String query) {
+        return roomService.discoverRooms(query);
+    }
+
     @PostMapping
     public RoomDto createRoom(@Valid @RequestBody CreateRoomRequest request) {
         return roomService.createRoom(request);
+    }
+
+    @PostMapping("/{roomId}/join")
+    public RoomDto joinRoom(@PathVariable UUID roomId) {
+        return roomService.joinOrRequestAccess(roomId);
+    }
+
+    @GetMapping("/{roomId}/requests")
+    public List<RoomJoinRequestDto> listJoinRequests(@PathVariable UUID roomId) {
+        return roomService.listJoinRequests(roomId);
+    }
+
+    @PostMapping("/{roomId}/requests/{userId}/approve")
+    public RoomDto approveJoinRequest(@PathVariable UUID roomId, @PathVariable UUID userId) {
+        return roomService.approveJoinRequest(roomId, userId);
+    }
+
+    @PostMapping("/{roomId}/requests/{userId}/reject")
+    public void rejectJoinRequest(@PathVariable UUID roomId, @PathVariable UUID userId) {
+        roomService.rejectJoinRequest(roomId, userId);
+    }
+
+    @PostMapping("/{roomId}/members")
+    public RoomDto addRoomMember(@PathVariable UUID roomId, @RequestParam UUID targetUserId) {
+        return roomService.addMember(roomId, targetUserId);
     }
 
     @GetMapping("/{roomId}/messages")

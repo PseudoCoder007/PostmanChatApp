@@ -171,7 +171,31 @@ public class IgrisService {
             throw new IOException("Igris API failed: " + response.statusCode());
         }
         JsonNode root = objectMapper.readTree(response.body());
-        return root.path("choices").path(0).path("message").path("content").asText();
+        return extractChatContent(root.path("choices").path(0).path("message").path("content"));
+    }
+
+    private static String extractChatContent(JsonNode contentNode) {
+        if (contentNode == null || contentNode.isMissingNode() || contentNode.isNull()) {
+            return "";
+        }
+        if (contentNode.isTextual()) {
+            return contentNode.asText();
+        }
+        if (contentNode.isArray()) {
+            StringBuilder builder = new StringBuilder();
+            for (JsonNode node : contentNode) {
+                if (node.isTextual()) {
+                    builder.append(node.asText());
+                } else if (node.has("text")) {
+                    builder.append(node.path("text").asText(""));
+                }
+            }
+            return builder.toString().trim();
+        }
+        if (contentNode.has("text")) {
+            return contentNode.path("text").asText("");
+        }
+        return contentNode.toString();
     }
 
     private static String extractFirstJsonObject(String raw) {

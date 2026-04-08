@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export interface TutorialStep {
   id: string;
@@ -89,15 +90,54 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isSkipped, setIsSkipped] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [storageKey, setStorageKey] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('postmanchat.tutorial.completed');
-      if (stored === 'true') {
+    let mounted = true;
+
+    const syncSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      const userId = data.session?.user.id ?? null;
+      if (!userId) {
+        setStorageKey(null);
+        setCurrentStepIndex(0);
         setIsCompleted(true);
         setIsSkipped(true);
+        return;
       }
-    } catch {}
+
+      const nextStorageKey = `postmanchat.tutorial.seen.${userId}`;
+      setStorageKey(nextStorageKey);
+      try {
+        const stored = localStorage.getItem(nextStorageKey);
+        if (stored === 'true') {
+          setIsCompleted(true);
+          setIsSkipped(true);
+        } else {
+          localStorage.setItem(nextStorageKey, 'true');
+          setCurrentStepIndex(0);
+          setIsCompleted(false);
+          setIsSkipped(false);
+        }
+      } catch {
+        setCurrentStepIndex(0);
+        setIsCompleted(false);
+        setIsSkipped(false);
+      }
+    };
+
+    void syncSession();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void syncSession();
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const nextStep = () => {
@@ -115,7 +155,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const completeTutorial = () => {
     setIsCompleted(true);
     try {
-      localStorage.setItem('postmanchat.tutorial.completed', 'true');
+      if (storageKey) localStorage.setItem(storageKey, 'true');
     } catch {}
   };
 
@@ -124,7 +164,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     setIsCompleted(false);
     setIsSkipped(false);
     try {
-      localStorage.removeItem('postmanchat.tutorial.completed');
+      if (storageKey) localStorage.removeItem(storageKey);
     } catch {}
   };
 

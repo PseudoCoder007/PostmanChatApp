@@ -72,7 +72,9 @@ public class MessageService {
         UUID userId = Authz.requireUserId();
         roomService.assertMember(roomId, userId);
         int capped = Math.max(1, Math.min(limit, 100));
-        List<Message> raw = messageRepository.findPageForRoom(roomId, before, PageRequest.of(0, capped));
+        List<Message> raw = before == null
+                ? messageRepository.findPageForRoom(roomId, PageRequest.of(0, capped))
+                : messageRepository.findPageForRoomBefore(roomId, before, PageRequest.of(0, capped));
         List<Message> chronological = raw.stream().toList();
         List<Message> mutable = new java.util.ArrayList<>(chronological);
         Collections.reverse(mutable);

@@ -60,4 +60,5 @@ public class EmailNotificationService {
             log.warn("Failed to send notification email to {}", recipient.getEmail(), ex);
         }
     }
+
 }
