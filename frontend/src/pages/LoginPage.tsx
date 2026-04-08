@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { Globe, Mail } from 'lucide-react';
+import { AuthForm } from '@/components/ui/sign-in-1';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
+
+const companyLogoSrc = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='18' fill='%230a0a0a'/%3E%3Cpath d='M20 24h40v8H20zm0 16h40v8H20zm0 16h26v8H20z' fill='white'/%3E%3C/svg%3E";
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -28,8 +33,35 @@ export default function LoginPage() {
 
   return (
     <motion.div className="auth-shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-      <motion.div className="card stack" style={{ maxWidth: 420 }} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: 'easeOut' }}>
-        <h1>Sign in</h1>
+      <div className="auth-backdrop-copy">
+        <span className="auth-kicker">Postman Chat App</span>
+        <h1>One place for friends, rooms, quests, and AI-powered conversation.</h1>
+        <p>Chat in real time, build public or private groups, track levels and coins, and unlock Igris for support, jokes, and side quests.</p>
+        <p>It keeps messaging simple for newcomers while still giving you progression, attachments, notifications, and a more engaging social loop than a basic inbox.</p>
+      </div>
+      <AuthForm
+        logoSrc={companyLogoSrc}
+        logoAlt="Postman Chat"
+        title="Welcome back"
+        description="Sign in to continue your chats, missions, and live rooms."
+        secondaryActions={[
+          {
+            label: 'Continue with Google',
+            icon: <Mail size={16} />,
+            onClick: () => toast.message('Google auth is not connected yet.'),
+          },
+          {
+            label: 'Continue with GitHub',
+            icon: <Globe size={16} />,
+            onClick: () => toast.message('GitHub auth is not connected yet.'),
+          },
+        ]}
+        footerContent={(
+          <>
+            No account? <Link to="/signup">Create one</Link>
+          </>
+        )}
+      >
         <form className="stack" onSubmit={onSubmit}>
           <label className="field">
             Email
@@ -40,14 +72,12 @@ export default function LoginPage() {
             <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </label>
           {error ? <p className="error">{error}</p> : null}
-          <button type="submit" className="btn" disabled={busy}>
-            {busy ? 'Signing in...' : 'Sign in'}
-          </button>
+          <Button type="submit" className="auth-form-button" disabled={busy}>
+            <Mail size={16} />
+            {busy ? 'Signing in...' : 'Continue with email'}
+          </Button>
         </form>
-        <p>
-          No account? <Link to="/signup">Sign up</Link>
-        </p>
-      </motion.div>
+      </AuthForm>
     </motion.div>
   );
 }

@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { Moon, Sun } from 'lucide-react';
 import { useStompRoom } from '@/hooks/useStompRoom';
 import { apiFetch, apiFetchForm } from '@/lib/api';
 import { getUserFriendlyErrorMessage } from '@/lib/errorMessages';
 import { supabase } from '@/lib/supabase';
 import { useTutorial } from '@/hooks/useTutorial';
+import { useThemeMode } from '@/hooks/useThemeMode';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { LevelUpCelebration } from '@/components/LevelUpCelebration';
 import type { Attachment, FriendRequest, IgrisChatResponse, IgrisChatTurn, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomVisibility, WsMessagePayload } from '@/types/chat';
@@ -32,6 +34,7 @@ async function json<T>(r: Response): Promise<T> {
 
 export default function ChatPage() {
   const nav = useNavigate();
+  const { isDark, toggleTheme } = useThemeMode();
   const qc = useQueryClient();
   const lastNotificationRef = useRef<string | null>(null);
   const previousMessageCountRef = useRef(0);
@@ -397,6 +400,10 @@ export default function ChatPage() {
           <p>Built as a cleaner gaming chat layout with live channels, progression, mission surfaces, notifications, and an unlockable AI console.</p>
         </div>
         <div className="topbar-actions">
+          <button type="button" className="utility-chip" onClick={toggleTheme}>
+            {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            {isDark ? 'Light' : 'Dark'}
+          </button>
           <button type="button" className="utility-chip" onClick={() => setSoundEnabled((value) => !value)}>{soundEnabled ? 'Sound On' : 'Sound Off'}</button>
           <button type="button" className="utility-chip" onClick={() => setActiveView('igris')}>{me?.canUseIgris ? 'Open Igris' : `Unlock Igris: ${igrisCoinsRemaining}`}</button>
           <button type="button" className="btn btn-secondary" onClick={() => void signOut()}>Sign out</button>

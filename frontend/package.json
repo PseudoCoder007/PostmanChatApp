@@ -10,9 +10,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
     "@stomp/stompjs": "^7.0.0",
     "@supabase/supabase-js": "2.45.4",
     "@tanstack/react-query": "^5.66.0",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "gsap": "^3.14.2",
