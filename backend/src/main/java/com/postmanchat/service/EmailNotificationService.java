@@ -20,12 +20,19 @@ public class EmailNotificationService {
 
     public EmailNotificationService(
             ObjectProvider<JavaMailSender> mailSenderProvider,
-            @Value("${postman-chat.notifications.email.enabled:false}") boolean enabled,
+            @Value("${postman-chat.notifications.email.enabled:false}") String enabledValue,
             @Value("${postman-chat.notifications.email.from:no-reply@postmanchat.local}") String from
     ) {
         this.mailSenderProvider = mailSenderProvider;
-        this.enabled = enabled;
+        this.enabled = parseEnabled(enabledValue);
         this.from = from;
+    }
+
+    private boolean parseEnabled(String enabledValue) {
+        if (enabledValue == null || enabledValue.isBlank()) {
+            return false;
+        }
+        return Boolean.parseBoolean(enabledValue);
     }
 
     public void sendNotificationEmail(Profile recipient, String title, String body) {
