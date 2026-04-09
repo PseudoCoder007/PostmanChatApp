@@ -58,5 +58,14 @@ export function useStompRoom(
     };
   }, [roomId]);
 
-  return connected;
+  const sendTyping = (typing: boolean) => {
+    const client = clientRef.current;
+    if (!client?.connected || !roomId) return;
+    client.publish({
+      destination: `/app/rooms/${roomId}/typing`,
+      body: JSON.stringify({ typing }),
+    });
+  };
+
+  return { connected, sendTyping };
 }

@@ -100,8 +100,16 @@ export interface NotificationItem {
 }
 
 export interface WsMessagePayload {
-  type: 'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED';
-  message: Message;
+  type: 'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED' | 'TYPING';
+  message: Message | null;
+  typing?: TypingEvent | null;
+}
+
+export interface TypingEvent {
+  roomId: string;
+  userId: string;
+  displayName: string;
+  typing: boolean;
 }
 
 export interface IgrisChatResponse {

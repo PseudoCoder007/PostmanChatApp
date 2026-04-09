@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Globe, Mail, Sparkles } from 'lucide-react';
 import { AuthForm } from '@/components/ui/sign-in-1';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
+import { publicSiteUrl, supabase } from '@/lib/supabase';
 
 const companyLogoSrc = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='18' fill='%230a0a0a'/%3E%3Cpath d='M23 22h34c4.4 0 8 3.6 8 8v20c0 4.4-3.6 8-8 8H40l-8 8v-8h-9c-4.4 0-8-3.6-8-8V30c0-4.4 3.6-8 8-8Z' fill='white'/%3E%3C/svg%3E";
 
@@ -25,7 +25,10 @@ export default function SignupPage() {
     const { data, error: err } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
-      options: { data: { name: displayName || normalizedEmail.split('@')[0] } },
+      options: {
+        data: { name: displayName || normalizedEmail.split('@')[0] },
+        emailRedirectTo: publicSiteUrl || undefined,
+      },
     });
     setBusy(false);
     if (err) {

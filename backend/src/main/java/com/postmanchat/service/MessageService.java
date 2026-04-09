@@ -11,6 +11,7 @@ import com.postmanchat.web.Authz;
 import com.postmanchat.web.dto.MessageDto;
 import com.postmanchat.web.dto.PatchMessageRequest;
 import com.postmanchat.web.dto.SendMessageRequest;
+import com.postmanchat.web.dto.TypingEventDto;
 import com.postmanchat.web.dto.WsMessagePayload;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -148,6 +149,17 @@ public class MessageService {
                 messageId, roomId, userId, senderDisplayName, senderUsername, "", null, message.getCreatedAt(), message.getEditedAt(), message.getReplyTo()
         );
         messagingTemplate.convertAndSend(topic(roomId), new WsMessagePayload("MESSAGE_DELETED", tombstone));
+    }
+
+    @Transactional(readOnly = true)
+    public void broadcastTyping(UUID roomId, boolean typing) {
+        UUID userId = Authz.requireUserId();
+        roomService.assertMember(roomId, userId);
+        Profile sender = profileRepository.findById(userId).orElse(fallbackProfile(userId));
+        messagingTemplate.convertAndSend(
+                topic(roomId),
+                new WsMessagePayload("TYPING", new TypingEventDto(roomId, userId, sender.getDisplayName(), typing))
+        );
     }
 
     private String sanitizeContent(String raw, UUID attachmentId) {

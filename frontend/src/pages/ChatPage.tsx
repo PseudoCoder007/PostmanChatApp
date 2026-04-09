@@ -11,7 +11,7 @@ import { useTutorial } from '@/hooks/useTutorial';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { LevelUpCelebration } from '@/components/LevelUpCelebration';
-import type { Attachment, FriendRequest, IgrisChatResponse, IgrisChatTurn, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomVisibility, WsMessagePayload } from '@/types/chat';
+import type { Attachment, FriendRequest, IgrisChatResponse, IgrisChatTurn, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomVisibility, TypingEvent, WsMessagePayload } from '@/types/chat';
 
 type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile';
 type IgrisMessage = { id: string; role: 'user' | 'assistant'; content: string };
@@ -52,12 +52,17 @@ export default function ChatPage() {
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
+  const [roomTyping, setRoomTyping] = useState<TypingEvent | null>(null);
   const [igrisDraft, setIgrisDraft] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(() => readSoundPreference());
   const [focusRefreshTick, setFocusRefreshTick] = useState(() => Math.floor(Date.now() / (10 * 60 * 1000)));
   const [igrisMessages, setIgrisMessages] = useState<IgrisMessage[]>([
     { id: 'intro', role: 'assistant', content: 'Igris online. I can be your funny low-key therapist friend, boredom killer, comeback coach, or chaos planner. Tell me the lore.' },
   ]);
+  const igrisMessagesRef = useRef<IgrisMessage[]>(igrisMessages);
+  const igrisCooldownRef = useRef<{ message: string; sentAt: number } | null>(null);
+  const typingIdleTimeoutRef = useRef<number | null>(null);
+  const typingClearTimeoutRef = useRef<number | null>(null);
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: async () => json<Profile>(await apiFetch('/api/me')), staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: allRooms = [] } = useQuery({ queryKey: ['rooms'], queryFn: async () => json<Room[]>(await apiFetch('/api/rooms')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: discoverRooms = [] } = useQuery({
@@ -134,6 +139,16 @@ export default function ChatPage() {
     const interval = window.setInterval(refresh, 60000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    setRoomTyping(null);
+    if (typingIdleTimeoutRef.current) window.clearTimeout(typingIdleTimeoutRef.current);
+    if (typingClearTimeoutRef.current) window.clearTimeout(typingClearTimeoutRef.current);
+  }, [activeRoomId]);
+
+  useEffect(() => {
+    igrisMessagesRef.current = igrisMessages;
+  }, [igrisMessages]);
 
   useEffect(() => {
     const latest = notifications.find((item) => !item.read);
@@ -213,7 +228,21 @@ export default function ChatPage() {
   }, [me?.id, me?.level, me?.title, soundEnabled]);
 
   function onWsEvent(payload: WsMessagePayload) {
-    if (!activeRoomId || payload.message.roomId !== activeRoomId) return;
+    if (!activeRoomId) return;
+    if (payload.type === 'TYPING' && payload.typing?.roomId === activeRoomId) {
+      if (!payload.typing.typing || payload.typing.userId === me?.id) {
+        setRoomTyping(null);
+        return;
+      }
+      setRoomTyping(payload.typing);
+      if (typingClearTimeoutRef.current) window.clearTimeout(typingClearTimeoutRef.current);
+      typingClearTimeoutRef.current = window.setTimeout(() => setRoomTyping(null), 1800);
+      return;
+    }
+    if (!payload.message || payload.message.roomId !== activeRoomId) return;
+    if (roomTyping && payload.message.senderId === roomTyping.userId) {
+      setRoomTyping(null);
+    }
     qc.setQueryData<Message[]>(['messages', activeRoomId], (old) => {
       const list = old ?? [];
       if (payload.type === 'MESSAGE_DELETED') return list.filter((message) => message.id !== payload.message.id);
@@ -223,7 +252,7 @@ export default function ChatPage() {
     });
   }
 
-  useStompRoom(activeRoomId, onWsEvent);
+  const { sendTyping } = useStompRoom(activeRoomId, onWsEvent);
 
   const refreshCore = async () => {
     await Promise.all([
@@ -323,20 +352,56 @@ export default function ChatPage() {
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const askIgris = useMutation({
-    mutationFn: async (message: string) => {
-      const history: IgrisChatTurn[] = igrisMessages.slice(-6).map((item) => ({ role: item.role, content: item.content }));
+    mutationFn: async ({ message }: { message: string; pendingMessageId: string }) => {
+      const history: IgrisChatTurn[] = igrisMessagesRef.current
+        .filter((item) => item.content !== 'Igris is typing...')
+        .slice(-6)
+        .map((item) => ({ role: item.role, content: item.content }));
       return json<IgrisChatResponse>(await apiFetch('/api/igris/chat', { method: 'POST', body: JSON.stringify({ message, history }) }));
     },
-    onSuccess: (res, message) => {
+    onSuccess: (res, variables) => {
       const reply = typeof res.reply === 'string'
         ? res.reply
         : JSON.stringify(res.reply ?? 'Igris replied, but the response format was unexpected.');
       playUiTone('success');
-      setIgrisMessages((old) => [...old, { id: createClientId(), role: 'user', content: message }, { id: createClientId(), role: 'assistant', content: reply || 'Igris had a blank reply this time. Try again.' }]);
+      setIgrisMessages((old) => old.flatMap((item) => (
+        item.id === variables.pendingMessageId
+          ? [{ id: createClientId(), role: 'assistant' as const, content: reply || 'Igris had a blank reply this time. Try again.' }]
+          : [item]
+      )));
       setIgrisDraft('');
     },
-    onError: (error: Error, message) => { toast.error(getUserFriendlyErrorMessage(error)); setIgrisMessages((old) => [...old, { id: createClientId(), role: 'user', content: message }, { id: createClientId(), role: 'assistant', content: String(getUserFriendlyErrorMessage(error)) }]); },
+    onError: (error: Error, variables) => {
+      const friendly = String(getUserFriendlyErrorMessage(error));
+      toast.error(friendly);
+      setIgrisMessages((old) => old.flatMap((item) => (
+        item.id === variables.pendingMessageId
+          ? [{ id: createClientId(), role: 'assistant' as const, content: friendly }]
+          : [item]
+      )));
+    },
   });
+
+  function submitIgrisMessage(rawMessage: string) {
+    const message = rawMessage.trim();
+    if (!message || askIgris.isPending) return;
+
+    const now = Date.now();
+    const last = igrisCooldownRef.current;
+    if (last && last.message === message && now - last.sentAt < 1500) {
+      toast.message('Igris is already working on that prompt.');
+      return;
+    }
+
+    const pendingMessageId = createClientId();
+    igrisCooldownRef.current = { message, sentAt: now };
+    setIgrisMessages((old) => [
+      ...old,
+      { id: createClientId(), role: 'user', content: message },
+      { id: pendingMessageId, role: 'assistant', content: 'Igris is typing...' },
+    ]);
+    void askIgris.mutateAsync({ message, pendingMessageId });
+  }
 
   async function uploadProfilePhoto(file: File) {
     if (!me?.profilePhotoUnlocked) {
@@ -368,10 +433,27 @@ export default function ChatPage() {
         attachmentId = (await uploadAttachment.mutateAsync(selectedFile)).id;
       }
       if (!draft.trim() && !attachmentId) return;
+      sendTyping(false);
+      if (typingIdleTimeoutRef.current) window.clearTimeout(typingIdleTimeoutRef.current);
       await sendMessage.mutateAsync({ roomId: activeRoomId, content: draft.trim(), attachmentId });
     } catch (error) {
       toast.error(getUserFriendlyErrorMessage(error instanceof Error ? error : String(error)));
     }
+  }
+
+  function handleDraftChange(nextDraft: string) {
+    setDraft(nextDraft);
+    if (!activeRoomId || activeRoom?.type !== 'direct') return;
+
+    if (typingIdleTimeoutRef.current) window.clearTimeout(typingIdleTimeoutRef.current);
+
+    if (nextDraft.trim()) {
+      sendTyping(true);
+      typingIdleTimeoutRef.current = window.setTimeout(() => sendTyping(false), 1200);
+      return;
+    }
+
+    sendTyping(false);
   }
 
   async function handleProfileSave() {
@@ -488,12 +570,13 @@ export default function ChatPage() {
                   <section className="panel message-panel">
                     <div className="message-stream">
                       {orderedMessages.map((message) => <article key={message.id} className={`message-bubble ${message.senderId === me?.id ? 'own' : ''}`}><div className="message-avatar">{initials(message.senderDisplayName)}</div><div className="message-body"><div className="message-meta"><strong>{message.senderId === me?.id ? 'You' : message.senderDisplayName}</strong><span>@{message.senderUsername}</span><time>{formatTime(message.createdAt)}</time></div>{message.content ? <p>{message.content}</p> : null}{message.attachment ? <AttachmentPreview attachment={message.attachment} /> : null}</div></article>)}
+                      {activeRoom?.type === 'direct' && roomTyping ? <div className="typing-indicator">{roomTyping.displayName} is typing...</div> : null}
                       {orderedMessages.length === 0 ? <div className="empty-card">No transmissions yet. Break the silence.</div> : null}
                     </div>
                   </section>
                   <section className="panel composer-panel">
                     <div className="section-header compact"><div><span className="eyebrow">Transmit</span><h3>Send message</h3></div><span className="metric-badge">8,000 max</span></div>
-                    <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Send a message, quest hint, or a mildly chaotic one-liner." maxLength={8000} />
+                    <textarea value={draft} onChange={(e) => handleDraftChange(e.target.value)} placeholder="Send a message, quest hint, or a mildly chaotic one-liner." maxLength={8000} />
                     <div className="composer-toolbar">
                       <label className="file-picker"><span>{selectedFile ? 'Swap file' : 'Attach file'}</span><input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.txt,.ppt,.pptx,.xls,.xlsx,.zip" onChange={(e) => { const file = e.target.files?.[0] ?? null; setSelectedFile(file); setUploadWarning(file && file.size > 50 * 1024 * 1024 ? 'This file is larger than 50 MB.' : null); }} /></label>
                       <button type="button" className="btn" disabled={sendMessage.isPending || uploadAttachment.isPending || (!draft.trim() && !selectedFile)} onClick={() => void handleSend()}>Send transmission</button>
@@ -528,12 +611,12 @@ export default function ChatPage() {
                 <div className="section-header"><div><span className="eyebrow">AI Companion</span><h2>Igris Console</h2></div><span className={`status-pill ${me?.canUseIgris ? 'completed' : 'assigned'}`}>{me?.canUseIgris ? 'online' : 'locked'}</span></div>
                 {me?.canUseIgris ? (
                   <>
-                    <div className="igris-stream">{igrisMessages.map((message) => <div key={message.id} className={`igris-card ${message.role}`}><strong>{message.role === 'assistant' ? 'Igris' : 'You'}</strong><p>{message.content}</p></div>)}</div>
-                    <div className="composer-toolbar igris-toolbar"><input className="chat-input" value={igrisDraft} onChange={(e) => setIgrisDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && igrisDraft.trim() && !askIgris.isPending) { e.preventDefault(); askIgris.mutate(igrisDraft.trim()); } }} placeholder="Vent, ask for support, request a joke, get a comeback, or ask for a chaotic idea. Press Enter to send." /><button type="button" className="btn" disabled={askIgris.isPending || !igrisDraft.trim()} onClick={() => askIgris.mutate(igrisDraft.trim())}>Send</button></div>
+                    <div className="igris-stream">{igrisMessages.map((message) => <div key={message.id} className={`igris-card ${message.role} ${message.content === 'Igris is typing...' ? 'pending' : ''}`}><strong>{message.role === 'assistant' ? 'Igris' : 'You'}</strong><p>{message.content}</p></div>)}</div>
+                    <div className="composer-toolbar igris-toolbar"><input className="chat-input" value={igrisDraft} onChange={(e) => setIgrisDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && igrisDraft.trim() && !askIgris.isPending) { e.preventDefault(); submitIgrisMessage(igrisDraft); } }} placeholder={askIgris.isPending ? 'Igris is typing...' : 'Vent, ask for support, request a joke, get a comeback, or ask for a chaotic idea. Press Enter to send.'} /><button type="button" className="btn" disabled={askIgris.isPending || !igrisDraft.trim()} onClick={() => submitIgrisMessage(igrisDraft)}>{askIgris.isPending ? 'Typing...' : 'Send'}</button></div>
                   </>
                 ) : <div className="locked-panel"><div className="lock-orb">5</div><h3>Igris unlocks at 5 coins</h3><p>Earn {igrisCoinsRemaining} more coin{igrisCoinsRemaining === 1 ? '' : 's'} through chat and missions to unlock your funny supportive Gen Z sidekick.</p></div>}
               </section>
-              <aside className="panel quick-panel"><div className="section-header compact"><div><span className="eyebrow">Quick prompts</span><h3>Support + chaos</h3></div></div><div className="quick-grid">{['I am bored. Entertain me for 5 minutes.', 'I feel low-key sad. Talk to me nicely.', 'Roast my room names gently but make it funny.', 'Give me a chaotic but harmless DM opener.', 'Build me a workout side quest for the next 10 minutes.', 'Give me 3 rotating daily missions for this app.'].map((prompt) => <button key={prompt} type="button" disabled={!me?.canUseIgris} onClick={() => askIgris.mutate(prompt)}>{prompt}</button>)}</div></aside>
+              <aside className="panel quick-panel"><div className="section-header compact"><div><span className="eyebrow">Quick prompts</span><h3>Support + chaos</h3></div></div><div className="quick-grid">{['I am bored. Entertain me for 5 minutes.', 'I feel low-key sad. Talk to me nicely.', 'Roast my room names gently but make it funny.', 'Give me a chaotic but harmless DM opener.', 'Build me a workout side quest for the next 10 minutes.', 'Give me 3 rotating daily missions for this app.'].map((prompt) => <button key={prompt} type="button" disabled={!me?.canUseIgris || askIgris.isPending} onClick={() => submitIgrisMessage(prompt)}>{prompt}</button>)}</div></aside>
             </section>
           ) : null}
 
@@ -607,7 +690,7 @@ export default function ChatPage() {
 
         <aside className="intel-rail">
           <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Live intel</span><h3>Overview</h3></div></div><div className="intel-grid"><button type="button" className="intel-tile" onClick={() => setActiveView('board')}><span>Unread alerts</span><strong>{unread.length}</strong><small>Review</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('people')}><span>Online friends</span><strong>{onlineFriends.length}</strong><small>Open squad</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('quests')}><span>Quest streak</span><strong>{completedQuests.length}</strong><small>Mission board</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('igris')}><span>AI access</span><strong>{me?.canUseIgris ? 'Ready' : `${igrisCoinsRemaining} left`}</strong><small>Igris</small></button></div></section>
-          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Focus tools</span><h3>Engagement controls</h3></div><span className="metric-badge">{nextFocusRefreshLabel}</span></div><div className="support-stack"><button type="button" className="support-button" onClick={() => setActiveView('chat')}>Return to active channel</button><button type="button" className="support-button" onClick={() => setActiveView('quests')}>Open mission board</button><button type="button" className="support-button" onClick={() => generateQuest.mutate()}>Generate AI mission</button><button type="button" className="support-button" disabled={!me?.canUseIgris} onClick={() => { setActiveView('igris'); askIgris.mutate('Give me a random funny quest that matches this app.'); }}>Ask Igris for quest ideas</button><button type="button" className="support-button" disabled={!me?.canUseIgris} onClick={() => { setActiveView('igris'); askIgris.mutate('Make me a workout planner side quest with a proof upload idea.'); }}>Workout planner</button><button type="button" className="support-button" onClick={() => setActiveView('people')}>Find squadmates</button><button type="button" className="support-button" onClick={() => { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); }}>Enable browser alerts</button></div></section>
+          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Focus tools</span><h3>Engagement controls</h3></div><span className="metric-badge">{nextFocusRefreshLabel}</span></div><div className="support-stack"><button type="button" className="support-button" onClick={() => setActiveView('chat')}>Return to active channel</button><button type="button" className="support-button" onClick={() => setActiveView('quests')}>Open mission board</button><button type="button" className="support-button" onClick={() => generateQuest.mutate()}>Generate AI mission</button><button type="button" className="support-button" disabled={!me?.canUseIgris || askIgris.isPending} onClick={() => { setActiveView('igris'); submitIgrisMessage('Give me a random funny quest that matches this app.'); }}>Ask Igris for quest ideas</button><button type="button" className="support-button" disabled={!me?.canUseIgris || askIgris.isPending} onClick={() => { setActiveView('igris'); submitIgrisMessage('Make me a workout planner side quest with a proof upload idea.'); }}>Workout planner</button><button type="button" className="support-button" onClick={() => setActiveView('people')}>Find squadmates</button><button type="button" className="support-button" onClick={() => { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); }}>Enable browser alerts</button></div></section>
           <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Daily briefing</span><h3>What matters now</h3></div></div><div className="briefing-list"><div className="briefing-row"><strong>{activeRoom ? getRoomTitle(activeRoom) : 'No active room'}</strong><span>{activeRoom ? (activeRoom.type === 'direct' ? 'Private line active.' : 'Squad channel active.') : 'Pick a room to see live traffic.'}</span></div><div className="briefing-row"><strong>{activeQuests.length} active mission{activeQuests.length === 1 ? '' : 's'}</strong><span>{activeQuests.length ? 'Complete verified actions for XP and coins.' : 'Generate a mission to start earning.'}</span></div><div className="briefing-row"><strong>{focusMissions[0]?.title ?? 'No focus card'}</strong><span>{focusMissions[0]?.description ?? 'Side quests rotate every 10 minutes.'}</span></div><div className="briefing-row"><strong>{me?.canUseIgris ? 'Igris unlocked' : 'Igris locked'}</strong><span>{me?.canUseIgris ? 'Use Igris for jokes, emotional support, chaotic prompts, workout dares, and social recovery missions.' : `Earn ${igrisCoinsRemaining} more coin${igrisCoinsRemaining === 1 ? '' : 's'} to unlock it.`}</span></div></div></section>
         </aside>
       </section>

@@ -409,6 +409,24 @@ html[data-theme="light"] .error { color: #b91c1c; }
 .quick-grid { display: grid; }
 .quick-grid button { font-weight: 700; }
 .igris-card.user { background: var(--card-strong); }
+.typing-indicator {
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  padding: 0.2rem 0.35rem 0;
+}
+.igris-card.pending {
+  border-color: var(--ring);
+  position: relative;
+}
+.igris-card.pending p::after {
+  content: '';
+  display: inline-block;
+  width: 1.2rem;
+  margin-left: 0.35rem;
+  border-bottom: 2px dotted currentColor;
+  animation: igrisTypingDots 1s steps(3, end) infinite;
+  vertical-align: middle;
+}
 .notification-tile.active, .room-tile.active { border-color: var(--ring); background: var(--surface-alt); }
 .leader-copy { flex: 1; min-width: 0; }
 .leader-score, .banner-metrics { flex-wrap: wrap; }
@@ -626,6 +644,12 @@ html[data-theme="light"] .error { color: #b91c1c; }
   min-height: 180px;
   margin-top: 1rem;
   color: var(--text-soft);
+}
+
+@keyframes igrisTypingDots {
+  0% { width: 0.2rem; opacity: 0.3; }
+  50% { width: 0.7rem; opacity: 0.7; }
+  100% { width: 1.2rem; opacity: 1; }
 }
 
 @media (max-width: 1260px) {
