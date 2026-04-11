@@ -2,6 +2,9 @@
 .github
 node_modules
 backend/target
+backend/backend/uploads
+backend/*.log
+frontend/dist
 frontend/node_modules
 *.md
 .env*

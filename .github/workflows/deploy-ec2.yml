@@ -25,6 +25,10 @@ jobs:
         script: |
           cd ~
 
+          # Free docker build cache before pulling the latest repo.
+          docker system prune -af || true
+          docker builder prune -af || true
+
           # Clone repo if not exists, else pull latest
           if [ -d "postman-chat" ]; then
             cd postman-chat && git pull origin main
@@ -34,6 +38,7 @@ jobs:
           fi
 
           sudo mkdir -p /etc/postman-chat
+          sudo mkdir -p /var/lib/postman-chat/uploads
           sudo cp deploy/nginx/postmanchat.live.conf.template /etc/postman-chat/nginx.conf.template
           sudo cp deploy/ec2/setup-nginx-certbot.sh /usr/local/bin/postman-chat-setup-nginx
           sudo chmod +x /usr/local/bin/postman-chat-setup-nginx
@@ -60,6 +65,7 @@ jobs:
           docker run -d --name postman-chat \
             -p 127.0.0.1:8080:8080 \
             --restart always \
+            -v /var/lib/postman-chat/uploads:/app/backend/uploads \
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
             -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
@@ -77,6 +83,6 @@ jobs:
             -e MAIL_SMTP_STARTTLS="${{ secrets.MAIL_SMTP_STARTTLS }}" \
             postman-chat
 
-          sudo systemctl reload nginx
+          sudo systemctl restart nginx
 
           
