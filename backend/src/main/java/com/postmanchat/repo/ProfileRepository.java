@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ProfileRepository extends JpaRepository<Profile, UUID> {
@@ -19,4 +20,6 @@ public interface ProfileRepository extends JpaRepository<Profile, UUID> {
     List<Profile> searchByDisplayName(@Param("query") String query);
 
     boolean existsByUsernameIgnoreCase(String username);
+
+    Optional<Profile> findByUsernameIgnoreCase(String username);
 }

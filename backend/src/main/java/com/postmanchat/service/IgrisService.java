@@ -7,6 +7,7 @@ import com.postmanchat.domain.Profile;
 import com.postmanchat.domain.QuestTriggerType;
 import com.postmanchat.repo.IgrisChatHistoryRepository;
 import com.postmanchat.web.dto.IgrisChatTurn;
+import com.postmanchat.web.dto.IgrisHistoryItemDto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -21,6 +22,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -112,6 +114,8 @@ public class IgrisService {
             List<Map<String, String>> messages = new ArrayList<>();
             messages.add(Map.of("role", "system", "content", """
                     You are Igris, a supportive, funny in-app AI friend for a social chat game.
+                    The app was created by Mohd Saif. If anyone asks who created the app, who made it, or where to know more about the creator, tell them it was created by Mohd Saif and share this portfolio link: https://pseudocoder007.github.io/my-portfolio/
+                    You also help people understand the app. If they ask where to find something or how to do something, explain clearly how to create group chats, open direct messages, edit profile/settings, open quests, leaderboard, notifications, feedback, and unlock features.
                     Your job is to reduce loneliness, boredom, and emotional overwhelm through kind conversation while giving personal advice and real-life quest ideas.
                     Talk like a homie, not a therapist. Use current Gen Z slang naturally and lightly, not every sentence.
                     Good examples include: low-key, high-key, no cap, cooked, delulu, aura, ate, it's giving, main character, wild, ghosted, gaslit, glow-up, mood, softboy, extra, bread.
@@ -141,6 +145,17 @@ public class IgrisService {
             saveChatHistory(profile, userMessage, response);
             return response;
         }
+    }
+
+    public List<IgrisHistoryItemDto> listHistory(Profile profile, int limit) {
+        int cappedLimit = Math.min(Math.max(limit, 1), 50);
+        List<IgrisChatHistory> items = historyRepository.findTopByProfileOrderByCreatedAtDesc(profile, cappedLimit);
+        List<IgrisHistoryItemDto> mapped = items.stream()
+                .map(item -> new IgrisHistoryItemDto(item.getId(), item.getRole(), item.getContent(), item.getCreatedAt()))
+                .toList();
+        List<IgrisHistoryItemDto> ordered = new ArrayList<>(mapped);
+        Collections.reverse(ordered);
+        return ordered;
     }
 
     private void saveChatHistory(Profile profile, String userMessage, String assistantResponse) {

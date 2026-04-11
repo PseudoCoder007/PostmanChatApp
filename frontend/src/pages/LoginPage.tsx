@@ -14,8 +14,9 @@ const companyLogoSrc = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/
 export default function LoginPage() {
   const nav = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [oauthBusy, setOauthBusy] = useState<'google' | null>(null);
@@ -90,7 +91,20 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setBusy(true);
-    const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    let email = identifier.trim().toLowerCase();
+    if (!email.includes('@')) {
+      const lookup = await fetch(`/api/public/auth/login-identifier?value=${encodeURIComponent(email)}`);
+      if (!lookup.ok) {
+        const message = 'We could not find an account for that email or username.';
+        setBusy(false);
+        setError(message);
+        toast.error(message);
+        return;
+      }
+      const body = await lookup.json() as { email?: string };
+      email = body.email?.trim().toLowerCase() ?? '';
+    }
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (err) {
       setError(err.message);
@@ -102,12 +116,24 @@ export default function LoginPage() {
   }
 
   async function onForgotPassword() {
-    const normalizedEmail = email.trim().toLowerCase();
+    let normalizedEmail = identifier.trim().toLowerCase();
     if (!normalizedEmail) {
-      const message = 'Enter your email first so we know where to send the reset link.';
+      const message = 'Enter your email or username first so we know where to send the reset link.';
       setError(message);
       toast.error(message);
       return;
+    }
+
+    if (!normalizedEmail.includes('@')) {
+      const lookup = await fetch(`/api/public/auth/login-identifier?value=${encodeURIComponent(normalizedEmail)}`);
+      if (!lookup.ok) {
+        const message = 'We could not find an account for that email or username.';
+        setError(message);
+        toast.error(message);
+        return;
+      }
+      const body = await lookup.json() as { email?: string };
+      normalizedEmail = body.email?.trim().toLowerCase() ?? '';
     }
 
     setError(null);
@@ -169,8 +195,8 @@ export default function LoginPage() {
         <form className="stack" onSubmit={onSubmit}>
           {notice ? <p className="auth-banner auth-banner-success"><CheckCircle2 size={16} />{notice}</p> : null}
           <label className="field">
-            Email
-            <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            Email or username
+            <input type="text" autoComplete="username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
           </label>
           <label className="field">
             <span className="auth-inline-label">
@@ -179,7 +205,12 @@ export default function LoginPage() {
                 {resetBusy ? 'Sending reset...' : 'Forgot password?'}
               </button>
             </span>
-            <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <div className="auth-password-wrap">
+              <input className="auth-password-input" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)}>
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </label>
           {error ? <p className="error">{error}</p> : null}
           <Button type="submit" className="auth-form-button" disabled={busy}>

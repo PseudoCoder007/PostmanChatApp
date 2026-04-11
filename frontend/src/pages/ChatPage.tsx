@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Moon, Sun } from 'lucide-react';
+import { Lock, Moon, Sun, X } from 'lucide-react';
 import { useStompRoom } from '@/hooks/useStompRoom';
 import { apiFetch, apiFetchForm, resolveAttachmentUrl } from '@/lib/api';
 import { getUserFriendlyErrorMessage } from '@/lib/errorMessages';
@@ -12,9 +12,9 @@ import { useThemeMode } from '@/hooks/useThemeMode';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { LevelUpCelebration } from '@/components/LevelUpCelebration';
 import { Footer } from '@/components/ui/footer-section';
-import type { Attachment, FriendRequest, IgrisChatResponse, IgrisChatTurn, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomVisibility, TypingEvent, WsMessagePayload } from '@/types/chat';
+import type { Attachment, FeedbackRequest, FeedbackResponse, FriendRequest, IgrisChatResponse, IgrisChatTurn, IgrisHistoryItem, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomVisibility, TypingEvent, WsMessagePayload } from '@/types/chat';
 
-type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile';
+type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile' | 'feedback';
 type IgrisMessage = { id: string; role: 'user' | 'assistant'; content: string };
 type FocusMission = { id: string; title: string; description: string; reward: string; lane: string };
 
@@ -26,6 +26,14 @@ const views: Array<{ key: ViewKey; label: string }> = [
   { key: 'board', label: 'Board' },
   { key: 'levels', label: 'Levels' },
   { key: 'profile', label: 'Profile' },
+  { key: 'feedback', label: 'Feedback' },
+];
+
+const IGRIS_PROMPTS = [
+  'How do I create a group chat here?',
+  'Where do I change my username and settings?',
+  'Explain quests, coins, and unlocks in a simple way.',
+  'Where can I submit a bug report or feedback?',
 ];
 
 async function json<T>(r: Response): Promise<T> {
@@ -56,6 +64,8 @@ export default function ChatPage() {
   const [roomTyping, setRoomTyping] = useState<TypingEvent | null>(null);
   const [igrisDraft, setIgrisDraft] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(() => readSoundPreference());
+  const [igrisDrawerOpen, setIgrisDrawerOpen] = useState(false);
+  const [feedbackForm, setFeedbackForm] = useState<FeedbackRequest>({ category: 'feedback', subject: '', message: '', contactEmail: '' });
   const [focusRefreshTick, setFocusRefreshTick] = useState(() => Math.floor(Date.now() / (10 * 60 * 1000)));
   const [igrisMessages, setIgrisMessages] = useState<IgrisMessage[]>([
     { id: 'intro', role: 'assistant', content: 'Igris online. I can be your funny low-key therapist friend, boredom killer, comeback coach, or chaos planner. Tell me the lore.' },
@@ -65,6 +75,14 @@ export default function ChatPage() {
   const typingIdleTimeoutRef = useRef<number | null>(null);
   const typingClearTimeoutRef = useRef<number | null>(null);
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: async () => json<Profile>(await apiFetch('/api/me')), staleTime: 60000, refetchOnWindowFocus: false, retry: false });
+  const { data: igrisHistory = [] } = useQuery({
+    queryKey: ['igris-history'],
+    queryFn: async () => json<IgrisHistoryItem[]>(await apiFetch('/api/igris/history?limit=24')),
+    enabled: !!me,
+    staleTime: 15000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
   const { data: allRooms = [] } = useQuery({ queryKey: ['rooms'], queryFn: async () => json<Room[]>(await apiFetch('/api/rooms')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: discoverRooms = [] } = useQuery({
     queryKey: ['rooms', 'discover', roomSearch],
@@ -152,6 +170,17 @@ export default function ChatPage() {
   }, [igrisMessages]);
 
   useEffect(() => {
+    if (igrisHistory.length === 0) {
+      return;
+    }
+    setIgrisMessages(igrisHistory.map((item) => ({
+      id: item.id,
+      role: item.role,
+      content: item.content,
+    })));
+  }, [igrisHistory]);
+
+  useEffect(() => {
     const latest = notifications.find((item) => !item.read);
     if (!latest || latest.id === lastNotificationRef.current || !document.hidden || !('Notification' in window)) return;
     lastNotificationRef.current = latest.id;
@@ -202,6 +231,7 @@ export default function ChatPage() {
         'igris': 'igris',
         'profile': 'profile',
         'levels': 'levels',
+        'feedback': 'feedback',
       };
       const targetView = viewMap[tutorial.currentStep.targetViewOrAction] as ViewKey;
       if (targetView) {
@@ -371,6 +401,7 @@ export default function ChatPage() {
           : [item]
       )));
       setIgrisDraft('');
+      void qc.invalidateQueries({ queryKey: ['igris-history'] });
     },
     onError: (error: Error, variables) => {
       const friendly = String(getUserFriendlyErrorMessage(error));
@@ -381,6 +412,14 @@ export default function ChatPage() {
           : [item]
       )));
     },
+  });
+  const submitFeedback = useMutation({
+    mutationFn: async (payload: FeedbackRequest) => json<FeedbackResponse>(await apiFetch('/api/feedback', { method: 'POST', body: JSON.stringify(payload) })),
+    onSuccess: (response) => {
+      toast.success(response.message);
+      setFeedbackForm({ category: 'feedback', subject: '', message: '', contactEmail: '' });
+    },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
 
   function submitIgrisMessage(rawMessage: string) {
@@ -422,7 +461,27 @@ export default function ChatPage() {
 
   async function signOut() {
     await supabase.auth.signOut();
+    setIgrisDrawerOpen(false);
     nav('/login');
+  }
+
+  function openIgrisDrawer() {
+    if (!me?.canUseIgris) return;
+    setIgrisDrawerOpen(true);
+  }
+
+  function closeIgrisDrawer() {
+    setIgrisDrawerOpen(false);
+  }
+
+  async function handleFeedbackSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await submitFeedback.mutateAsync({
+      category: feedbackForm.category,
+      subject: feedbackForm.subject.trim(),
+      message: feedbackForm.message.trim(),
+      contactEmail: feedbackForm.contactEmail?.trim() || undefined,
+    });
   }
 
   async function handleSend() {
@@ -487,8 +546,6 @@ export default function ChatPage() {
             {isDark ? <Sun size={16} /> : <Moon size={16} />}
             {isDark ? 'Light' : 'Dark'}
           </button>
-          <button type="button" className="utility-chip" onClick={() => setSoundEnabled((value) => !value)}>{soundEnabled ? 'Sound On' : 'Sound Off'}</button>
-          <button type="button" className="utility-chip" onClick={() => setActiveView('igris')}>{me?.canUseIgris ? 'Open Igris' : `Unlock Igris: ${igrisCoinsRemaining}`}</button>
           <button type="button" className="btn btn-secondary" onClick={() => void signOut()}>Sign out</button>
         </div>
       </header>
@@ -600,8 +657,8 @@ export default function ChatPage() {
 
           {activeView === 'quests' ? (
             <section className="grid-stage">
-              <section className="panel spotlight-panel full-span"><div className="section-header"><div><span className="eyebrow">Mission Control</span><h2>Auto-verified quest board</h2></div><span className="metric-badge">{activeQuests.length} active</span></div><p>Igris quests stay funny, but rewards only unlock when the app sees the matching DM, group post, room creation, proof image, or document upload.</p><div className="inline-actions"><button type="button" className="btn" disabled={generateQuest.isPending} onClick={() => generateQuest.mutate()}>Generate quest</button><button type="button" className="btn btn-secondary" onClick={() => setActiveView('igris')}>Open Igris</button></div></section>
-              <section className="panel full-span"><div className="section-header"><div><span className="eyebrow">Focus Refresh</span><h2>Rotating side quests</h2></div><span className="metric-badge">Refresh {nextFocusRefreshLabel}</span></div><p>These rotate every 10 minutes to keep the app feeling alive. They are guidance prompts for Igris and your own gameplay loop; the auto-verified board above still controls guaranteed XP and coin rewards.</p><div className="list-stack">{focusMissions.map((mission) => <div key={mission.id} className="entity-row"><div><strong>{mission.title}</strong><div className="muted-line">{mission.lane} - {mission.reward}</div><div className="muted-line">{mission.description}</div></div><button type="button" className="btn btn-secondary" onClick={() => { setActiveView('igris'); setIgrisDraft(`Turn this into a fun side quest with clear steps: ${mission.title}. ${mission.description}`); }}>{me?.canUseIgris ? 'Remix with Igris' : 'Queue prompt'}</button></div>)}</div></section>
+              <section className="panel spotlight-panel full-span"><div className="section-header"><div><span className="eyebrow">Mission Control</span><h2>Auto-verified quest board</h2></div><span className="metric-badge">{activeQuests.length} active</span></div><p>Igris quests stay funny, but rewards only unlock when the app sees the matching DM, group post, room creation, proof image, or document upload.</p><div className="inline-actions"><button type="button" className="btn" disabled={generateQuest.isPending} onClick={() => generateQuest.mutate()}>Generate quest</button><button type="button" className="btn btn-secondary" onClick={openIgrisDrawer}>Open Igris</button></div></section>
+              <section className="panel full-span"><div className="section-header"><div><span className="eyebrow">Focus Refresh</span><h2>Rotating side quests</h2></div><span className="metric-badge">Refresh {nextFocusRefreshLabel}</span></div><p>These rotate every 10 minutes to keep the app feeling alive. They are guidance prompts for Igris and your own gameplay loop; the auto-verified board above still controls guaranteed XP and coin rewards.</p><div className="list-stack">{focusMissions.map((mission) => <div key={mission.id} className="entity-row"><div><strong>{mission.title}</strong><div className="muted-line">{mission.lane} - {mission.reward}</div><div className="muted-line">{mission.description}</div></div><button type="button" className="btn btn-secondary" onClick={() => { openIgrisDrawer(); setIgrisDraft(`Turn this into a fun side quest with clear steps: ${mission.title}. ${mission.description}`); }}>{me?.canUseIgris ? 'Remix with Igris' : 'Queue prompt'}</button></div>)}</div></section>
               {quests.map((quest) => <section key={quest.id} className={`panel quest-panel ${quest.status === 'completed' ? 'completed' : ''}`}><div className="section-header compact"><div><span className="eyebrow">{quest.source === 'igris' ? 'Igris mission' : 'Quest'}</span><h3>{quest.title}</h3></div><span className={`status-pill ${quest.status}`}>{quest.status}</span></div><p>{quest.description}</p><div className="banner-metrics"><span className="metric-tag"><small>XP</small><strong>{quest.rewardXp}</strong></span><span className="metric-tag"><small>Coins</small><strong>{quest.rewardCoins}</strong></span><span className="metric-tag"><small>Trigger</small><strong>{triggerLabel(quest.triggerType)}</strong></span></div><div className="support-line">{quest.status === 'assigned' ? 'Complete the matching in-app action to auto-finish this mission.' : `Completed ${new Date(quest.completedAt ?? quest.assignedAt).toLocaleString()}`}</div></section>)}
             </section>
           ) : null}
@@ -681,23 +738,145 @@ export default function ChatPage() {
             </section>
           ) : null}
 
+          {activeView === 'feedback' ? (
+            <section className="feedback-grid">
+              <section className="panel">
+                <div className="section-header">
+                  <div>
+                    <span className="eyebrow">Contact Ops</span>
+                    <h2>Bugs, feedback, and questions</h2>
+                  </div>
+                </div>
+                <p className="feedback-note">Found a rough edge, want a sharper feature, or need help understanding the app? Send it here and it lands in the creator inbox.</p>
+                <form className="list-stack" onSubmit={(e) => void handleFeedbackSubmit(e)}>
+                  <select className="chat-input" value={feedbackForm.category} onChange={(e) => setFeedbackForm((old) => ({ ...old, category: e.target.value as FeedbackRequest['category'] }))}>
+                    <option value="bug">Bug</option>
+                    <option value="feedback">Feedback</option>
+                    <option value="query">Query</option>
+                  </select>
+                  <input className="chat-input" value={feedbackForm.subject} onChange={(e) => setFeedbackForm((old) => ({ ...old, subject: e.target.value }))} placeholder="Short subject" />
+                  <textarea className="chat-input" rows={7} value={feedbackForm.message} onChange={(e) => setFeedbackForm((old) => ({ ...old, message: e.target.value }))} placeholder="Describe the bug, feature idea, or question in detail." />
+                  <input className="chat-input" value={feedbackForm.contactEmail ?? ''} onChange={(e) => setFeedbackForm((old) => ({ ...old, contactEmail: e.target.value }))} placeholder="Optional contact email if you want a reply" />
+                  <div className="inline-actions">
+                    <button type="submit" className="btn" disabled={submitFeedback.isPending || !feedbackForm.subject.trim() || !feedbackForm.message.trim()}>{submitFeedback.isPending ? 'Sending...' : 'Send message'}</button>
+                    <button type="button" className="btn btn-secondary" disabled={submitFeedback.isPending} onClick={() => setFeedbackForm({ category: 'feedback', subject: '', message: '', contactEmail: '' })}>Clear</button>
+                  </div>
+                  {submitFeedback.error ? <div className="error">{getUserFriendlyErrorMessage(submitFeedback.error)}</div> : null}
+                </form>
+              </section>
+              <section className="panel">
+                <div className="section-header compact"><div><span className="eyebrow">What To Send</span><h3>Useful reports</h3></div></div>
+                <div className="list-stack">
+                  <div className="entity-row"><div><strong>Bug report</strong><div className="muted-line">Include what you clicked, what you expected, and what actually happened.</div></div></div>
+                  <div className="entity-row"><div><strong>Feature request</strong><div className="muted-line">Tell us the workflow you want to improve so the next version solves something real.</div></div></div>
+                  <div className="entity-row"><div><strong>Navigation help</strong><div className="muted-line">If the app feels confusing, ask here or ping Igris for a guided walkthrough.</div></div></div>
+                </div>
+              </section>
+            </section>
+          ) : null}
+
           {activeView === 'profile' ? (
             <section className="grid-stage">
               <section className="panel"><div className="section-header"><div><span className="eyebrow">Identity</span><h2>Profile editor</h2></div></div><input className="chat-input" value={profileForm.displayName} onChange={(e) => setProfileForm((old) => ({ ...old, displayName: e.target.value }))} placeholder="Display name" /><input className="chat-input" value={profileForm.username} onChange={(e) => setProfileForm((old) => ({ ...old, username: e.target.value.toLowerCase() }))} placeholder="Unique username" /><div style={{ position: 'relative', marginY: '16px' }}>{profileImageFile ? <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}><img src={URL.createObjectURL(profileImageFile)} alt="Selected preview" style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '400px', objectFit: 'cover' }} /><div style={{ padding: '8px', backgroundColor: '#0a0a0a', fontSize: '12px', color: '#888' }}>📷 {profileImageFile.name}</div></div> : profileForm.avatarUrl ? <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px' }}><img className="attachment-preview" src={profileForm.avatarUrl} alt="Profile preview" style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }} /></div> : <div style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', padding: '32px', textAlign: 'center', marginBottom: '12px', color: '#666', minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No photo yet</div>}</div><label className="file-picker" style={{ cursor: me?.profilePhotoUnlocked ? 'pointer' : 'not-allowed', opacity: me?.profilePhotoUnlocked ? 1 : 0.6 }}><span style={{ fontSize: '14px', fontWeight: 500 }}>{me?.profilePhotoUnlocked ? (profileImageFile || profileForm.avatarUrl ? '🔄 Swap photo' : '📸 Choose photo') : '🔒 Unlock at 5 coins'}</span><input type="file" accept="image/*" disabled={!me?.profilePhotoUnlocked} onChange={(e) => setProfileImageFile(e.target.files?.[0] ?? null)} style={{ display: 'none' }} /></label><div className="inline-actions">{profileImageFile ? <><button type="button" className="btn" disabled={updateProfile.isPending} onClick={() => void handleProfileSave()} style={{ flex: 1 }}>✓ Confirm & Save</button><button type="button" className="btn btn-secondary" disabled={updateProfile.isPending} onClick={() => setProfileImageFile(null)} style={{ flex: 1 }}>✕ Cancel</button></> : <><button type="button" className="btn" disabled={updateProfile.isPending || !profileForm.displayName.trim() || !profileForm.username.trim()} onClick={() => void handleProfileSave()}>Save loadout</button>{profileForm.avatarUrl && <button type="button" className="btn btn-secondary" disabled={updateProfile.isPending} onClick={() => { setProfileImageFile(null); void updateProfile.mutate({ ...profileForm, avatarUrl: '' }); }}>Remove photo</button>}</> }</div>{updateProfile.error ? <div className="error">{getUserFriendlyErrorMessage(updateProfile.error)}</div> : null}</section>
               <section className="panel"><div className="section-header"><div><span className="eyebrow">Unlocks</span><h2>Progress systems</h2></div></div><div className="unlock-list"><div className="unlock-row"><strong>Profile photo</strong><span className={`status-pill ${me?.profilePhotoUnlocked ? 'completed' : 'assigned'}`}>{me?.profilePhotoUnlocked ? 'Unlocked' : 'Locked'}</span></div><div className="unlock-row"><strong>Igris console</strong><span className={`status-pill ${me?.canUseIgris ? 'completed' : 'assigned'}`}>{me?.canUseIgris ? 'Unlocked' : 'Locked'}</span></div><div className="unlock-row"><strong>Friend challenge quests</strong><span className={`status-pill ${me?.canChallengeFriends ? 'completed' : 'assigned'}`}>{me?.canChallengeFriends ? 'Unlocked' : 'Locked'}</span></div><div className="unlock-row"><strong>Group room deployment</strong><span className={`status-pill ${(me?.coins ?? 0) >= 20 ? 'completed' : 'assigned'}`}>{(me?.coins ?? 0) >= 20 ? 'Ready' : '20 coins required'}</span></div></div></section>
+              <section className="panel">
+                <div className="section-header"><div><span className="eyebrow">Settings</span><h2>Experience controls</h2></div></div>
+                <div className="list-stack">
+                  <div className="entity-row">
+                    <div><strong>Sound effects</strong><div className="muted-line">Reward pings and message tones stay on by default unless you switch them off here.</div></div>
+                    <button type="button" className="btn btn-secondary" onClick={() => setSoundEnabled((current) => !current)}>{soundEnabled ? 'Sound on' : 'Sound off'}</button>
+                  </div>
+                  <div className="entity-row">
+                    <div><strong>Theme mode</strong><div className="muted-line">Dark is the base look, but you can still swap modes while you are inside the app.</div></div>
+                    <button type="button" className="btn btn-secondary" onClick={toggleTheme}>{isDark ? 'Light mode' : 'Dark mode'}</button>
+                  </div>
+                  <div className="entity-row">
+                    <div><strong>Replay tutorial</strong><div className="muted-line">Run the onboarding again if you want a fast tour of the latest layout.</div></div>
+                    <button type="button" className="btn btn-secondary" onClick={tutorial.resetTutorial}>Replay tutorial</button>
+                  </div>
+                  <div className="entity-row">
+                    <div><strong>Need help right now?</strong><div className="muted-line">Open feedback for support or ask Igris where to find rooms, quests, profile tools, and group chat actions.</div></div>
+                    <div className="inline-actions"><button type="button" className="btn btn-secondary" onClick={() => setActiveView('feedback')}>Open feedback</button><button type="button" className="btn btn-secondary" onClick={openIgrisDrawer} disabled={!me?.canUseIgris}>Ask Igris</button></div>
+                  </div>
+                </div>
+              </section>
             </section>
           ) : null}
         </main>
 
         <aside className="intel-rail">
-          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Live intel</span><h3>Overview</h3></div></div><div className="intel-grid"><button type="button" className="intel-tile" onClick={() => setActiveView('board')}><span>Unread alerts</span><strong>{unread.length}</strong><small>Review</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('people')}><span>Online friends</span><strong>{onlineFriends.length}</strong><small>Open squad</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('quests')}><span>Quest streak</span><strong>{completedQuests.length}</strong><small>Mission board</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('igris')}><span>AI access</span><strong>{me?.canUseIgris ? 'Ready' : `${igrisCoinsRemaining} left`}</strong><small>Igris</small></button></div></section>
-          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Focus tools</span><h3>Engagement controls</h3></div><span className="metric-badge">{nextFocusRefreshLabel}</span></div><div className="support-stack"><button type="button" className="support-button" onClick={() => setActiveView('chat')}>Return to active channel</button><button type="button" className="support-button" onClick={() => setActiveView('quests')}>Open mission board</button><button type="button" className="support-button" onClick={() => generateQuest.mutate()}>Generate AI mission</button><button type="button" className="support-button" disabled={!me?.canUseIgris || askIgris.isPending} onClick={() => { setActiveView('igris'); submitIgrisMessage('Give me a random funny quest that matches this app.'); }}>Ask Igris for quest ideas</button><button type="button" className="support-button" disabled={!me?.canUseIgris || askIgris.isPending} onClick={() => { setActiveView('igris'); submitIgrisMessage('Make me a workout planner side quest with a proof upload idea.'); }}>Workout planner</button><button type="button" className="support-button" onClick={() => setActiveView('people')}>Find squadmates</button><button type="button" className="support-button" onClick={() => { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); }}>Enable browser alerts</button></div></section>
+          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Live intel</span><h3>Overview</h3></div></div><div className="intel-grid"><button type="button" className="intel-tile" onClick={() => setActiveView('board')}><span>Unread alerts</span><strong>{unread.length}</strong><small>Review</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('people')}><span>Online friends</span><strong>{onlineFriends.length}</strong><small>Open squad</small></button><button type="button" className="intel-tile" onClick={() => setActiveView('quests')}><span>Quest streak</span><strong>{completedQuests.length}</strong><small>Mission board</small></button><button type="button" className="intel-tile" onClick={openIgrisDrawer}><span>AI access</span><strong>{me?.canUseIgris ? 'Ready' : `${igrisCoinsRemaining} left`}</strong><small>Igris</small></button></div></section>
+          <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Focus tools</span><h3>Engagement controls</h3></div><span className="metric-badge">{nextFocusRefreshLabel}</span></div><div className="support-stack"><button type="button" className="support-button" onClick={() => setActiveView('chat')}>Return to active channel</button><button type="button" className="support-button" onClick={() => setActiveView('quests')}>Open mission board</button><button type="button" className="support-button" onClick={() => generateQuest.mutate()}>Generate AI mission</button><button type="button" className="support-button" disabled={!me?.canUseIgris || askIgris.isPending} onClick={() => { openIgrisDrawer(); submitIgrisMessage('Give me a random funny quest that matches this app.'); }}>Ask Igris for quest ideas</button><button type="button" className="support-button" disabled={!me?.canUseIgris || askIgris.isPending} onClick={() => { openIgrisDrawer(); submitIgrisMessage('Make me a workout planner side quest with a proof upload idea.'); }}>Workout planner</button><button type="button" className="support-button" onClick={() => setActiveView('people')}>Find squadmates</button><button type="button" className="support-button" onClick={() => setActiveView('feedback')}>Send feedback</button><button type="button" className="support-button" onClick={() => { if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission(); }}>Enable browser alerts</button></div></section>
           <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Daily briefing</span><h3>What matters now</h3></div></div><div className="briefing-list"><div className="briefing-row"><strong>{activeRoom ? getRoomTitle(activeRoom) : 'No active room'}</strong><span>{activeRoom ? (activeRoom.type === 'direct' ? 'Private line active.' : 'Squad channel active.') : 'Pick a room to see live traffic.'}</span></div><div className="briefing-row"><strong>{activeQuests.length} active mission{activeQuests.length === 1 ? '' : 's'}</strong><span>{activeQuests.length ? 'Complete verified actions for XP and coins.' : 'Generate a mission to start earning.'}</span></div><div className="briefing-row"><strong>{focusMissions[0]?.title ?? 'No focus card'}</strong><span>{focusMissions[0]?.description ?? 'Side quests rotate every 10 minutes.'}</span></div><div className="briefing-row"><strong>{me?.canUseIgris ? 'Igris unlocked' : 'Igris locked'}</strong><span>{me?.canUseIgris ? 'Use Igris for jokes, emotional support, chaotic prompts, workout dares, and social recovery missions.' : `Earn ${igrisCoinsRemaining} more coin${igrisCoinsRemaining === 1 ? '' : 's'} to unlock it.`}</span></div></div></section>
         </aside>
       </section>
       <div className="mt-8">
-        <Footer />
+        <Footer onOpenFeedback={() => setActiveView('feedback')} />
       </div>
+      <div className="igris-launcher">
+        <div className="igris-bubble">
+          {me?.canUseIgris
+            ? 'Igris is live from anywhere. Ask for navigation help, quests, or creator lore.'
+            : `Igris is locked until 5 coins. Earn ${igrisCoinsRemaining} more to unlock your AI guide.`}
+        </div>
+        <button type="button" className={`igris-fab ${me?.canUseIgris ? 'unlocked' : 'locked'}`} onClick={openIgrisDrawer} disabled={!me?.canUseIgris}>
+          <span className="igris-orb">I</span>
+          <span className="igris-fab-label">
+            <strong>Igris AI</strong>
+            <small>{me?.canUseIgris ? 'Open guide' : `${igrisCoinsRemaining} coin${igrisCoinsRemaining === 1 ? '' : 's'} left`}</small>
+          </span>
+          {!me?.canUseIgris ? <Lock className="igris-fab-lock" size={16} /> : null}
+        </button>
+      </div>
+      {igrisDrawerOpen ? <button type="button" className="igris-drawer-backdrop" aria-label="Close Igris" onClick={closeIgrisDrawer} /> : null}
+      <aside className="igris-drawer" style={{ transform: igrisDrawerOpen ? 'translateX(0)' : 'translateX(calc(100% + 32px))' }}>
+        <div className="igris-drawer-header">
+          <div className="igris-drawer-title">
+            <div className="igris-orb">I</div>
+            <div>
+              <h3>Igris Assistant</h3>
+              <p>Navigation help, feature walkthroughs, social recovery, and creator lore.</p>
+            </div>
+          </div>
+          <button type="button" className="igris-drawer-close" onClick={closeIgrisDrawer}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="igris-suggestions">
+          {IGRIS_PROMPTS.map((prompt) => (
+            <button key={prompt} type="button" disabled={!me?.canUseIgris || askIgris.isPending} onClick={() => submitIgrisMessage(prompt)}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+        <div className="igris-history">
+          {igrisMessages.map((message) => (
+            <article key={message.id} className={`igris-history-item ${message.role}`}>
+              <div className="igris-history-meta">{message.role === 'assistant' ? 'Igris' : 'You'}</div>
+              <p>{message.content}</p>
+            </article>
+          ))}
+        </div>
+        <div className="igris-drawer-footer">
+          <div className="composer-toolbar igris-toolbar">
+            <input
+              className="chat-input"
+              value={igrisDraft}
+              onChange={(e) => setIgrisDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && igrisDraft.trim() && !askIgris.isPending) {
+                  e.preventDefault();
+                  submitIgrisMessage(igrisDraft);
+                }
+              }}
+              placeholder={askIgris.isPending ? 'Igris is typing...' : 'Ask how to create a group chat, where feedback lives, or who built this app.'}
+            />
+            <button type="button" className="btn" disabled={!me?.canUseIgris || askIgris.isPending || !igrisDraft.trim()} onClick={() => submitIgrisMessage(igrisDraft)}>
+              {askIgris.isPending ? 'Typing...' : 'Send'}
+            </button>
+          </div>
+        </div>
+      </aside>
       <TutorialOverlay />
       {levelUpCelebration && (
         <LevelUpCelebration

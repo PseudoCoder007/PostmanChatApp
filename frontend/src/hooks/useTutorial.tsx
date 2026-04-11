@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export interface TutorialStep {
@@ -14,63 +14,71 @@ export interface TutorialStep {
 const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: 'welcome',
-    title: '🎮 Welcome to PostmanChat',
-    description: 'A gamified messaging app where you earn XP and coins through quests and conversations. Let\'s get you started!',
+    title: 'Welcome to PostmanChat',
+    description: 'This is a gamified messaging app where chats, quests, and proof-based actions turn into XP, coins, and unlocks.',
     targetViewOrAction: 'chat',
     position: 'center',
-    buttonLabel: 'Next →',
+    buttonLabel: 'Next',
   },
   {
     id: 'rooms',
-    title: '💬 Chat in Rooms',
-    description: 'Click on rooms to chat with friends. You can create group rooms (costs 20 coins) or start direct messages.',
+    title: 'Chat in Rooms',
+    description: 'Use rooms for direct messages and squad conversations. Once you have enough coins, you can also create your own group room.',
     targetViewOrAction: 'chat',
     targetElement: '.room-stack',
     position: 'right',
-    buttonLabel: 'Next →',
+    buttonLabel: 'Next',
   },
   {
     id: 'quests',
-    title: '🎯 Complete Quests',
-    description: 'Quests give you XP and coins. Generate AI-powered missions from Igris or complete specific actions like uploading photos.',
+    title: 'Complete Quests',
+    description: 'Quests are the fastest way to earn XP and coins. The verified board rewards real in-app actions like posting, creating rooms, and uploading proof.',
     targetViewOrAction: 'quests',
     targetElement: '.quest-panel',
     position: 'left',
-    buttonLabel: 'Next →',
+    buttonLabel: 'Next',
   },
   {
     id: 'igris',
-    title: '🤖 Chat with Igris',
-    description: 'Igris is your AI sidekick! Chat with them for support, funny quest ideas, or emotional advice. Unlocks at 5 coins.',
+    title: 'Meet Igris',
+    description: 'Igris lives in the bottom-right launcher once you unlock it at 5 coins. It can explain navigation, help with group chats, and answer creator questions too.',
     targetViewOrAction: 'igris',
     position: 'left',
-    buttonLabel: 'Next →',
+    buttonLabel: 'Next',
+  },
+  {
+    id: 'feedback',
+    title: 'Send Feedback',
+    description: 'There is a dedicated feedback tab for bug reports, feature ideas, and support questions. If something feels confusing, this is a direct line.',
+    targetViewOrAction: 'feedback',
+    position: 'left',
+    buttonLabel: 'Next',
   },
   {
     id: 'coins',
-    title: '💰 Earn Coins & XP',
-    description: 'Coins unlock features (profile photo at 5 coins, friend quests at 10, group rooms at 20). XP determines your level and title.',
+    title: 'Earn Coins and XP',
+    description: 'Coins unlock features like Igris access and group room creation. XP raises your level and changes the title shown around the app.',
     targetViewOrAction: 'profile',
     targetElement: '.stat-card',
     position: 'left',
-    buttonLabel: 'Next →',
+    buttonLabel: 'Next',
   },
   {
-    id: 'profile',
-    title: '👤 Customize Your Profile',
-    description: 'Add a profile photo, set your username, and display name. Your profile represents you in the community.',
+    id: 'settings',
+    title: 'Profile and Settings',
+    description: 'Your profile view now handles your identity, sound toggle, theme controls, and tutorial replay. It is the main setup space.',
     targetViewOrAction: 'profile',
-    targetElement: '.chat-input',
+    targetElement: '.panel',
     position: 'left',
-    buttonLabel: 'Next →',
+    buttonLabel: 'Next',
   },
   {
     id: 'levels',
-    title: '📈 Track Your Progress',
-    description: 'Watch your level progression as you earn XP. Higher levels unlock new titles and prestige.',
+    title: 'Track Your Progress',
+    description: 'Watch your level roadmap as you earn XP. Higher levels make the whole app feel more alive and rewarding over time.',
     targetViewOrAction: 'levels',
     position: 'center',
-    buttonLabel: 'Let\'s Go! 🚀',
+    buttonLabel: 'Let\'s go',
   },
 ];
 
@@ -111,11 +119,10 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
       setStorageKey(nextStorageKey);
       try {
         const stored = localStorage.getItem(nextStorageKey);
-        if (stored === 'true') {
+        if (stored === 'completed' || stored === 'skipped') {
           setIsCompleted(true);
           setIsSkipped(true);
         } else {
-          localStorage.setItem(nextStorageKey, 'true');
           setCurrentStepIndex(0);
           setIsCompleted(false);
           setIsSkipped(false);
@@ -140,23 +147,26 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const completeTutorial = (state: 'completed' | 'skipped') => {
+    setIsCompleted(true);
+    try {
+      if (storageKey) localStorage.setItem(storageKey, state);
+    } catch {
+      // Ignore storage failures.
+    }
+  };
+
   const nextStep = () => {
     if (currentStepIndex < TUTORIAL_STEPS.length - 1) {
       setCurrentStepIndex((prev) => prev + 1);
     } else {
-      completeTutorial();
+      completeTutorial('completed');
     }
   };
 
   const skipTutorial = () => {
-    completeTutorial();
-  };
-
-  const completeTutorial = () => {
-    setIsCompleted(true);
-    try {
-      if (storageKey) localStorage.setItem(storageKey, 'true');
-    } catch {}
+    setIsSkipped(true);
+    completeTutorial('skipped');
   };
 
   const resetTutorial = () => {
@@ -165,7 +175,9 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     setIsSkipped(false);
     try {
       if (storageKey) localStorage.removeItem(storageKey);
-    } catch {}
+    } catch {
+      // Ignore storage failures.
+    }
   };
 
   const currentStep = !isSkipped && !isCompleted ? TUTORIAL_STEPS[currentStepIndex] : null;

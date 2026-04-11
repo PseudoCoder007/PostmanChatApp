@@ -16,6 +16,7 @@ export default function SignupPage() {
   const nav = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -206,7 +207,12 @@ export default function SignupPage() {
           </label>
           <label className="field">
             Password
-            <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+            <div className="auth-password-wrap">
+              <input className="auth-password-input" type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+              <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)}>
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </label>
           {error ? <p className="error">{error}</p> : null}
           <Button type="submit" className="auth-form-button" disabled={busy}>

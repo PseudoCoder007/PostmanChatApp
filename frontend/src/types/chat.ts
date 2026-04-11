@@ -120,3 +120,22 @@ export interface IgrisChatTurn {
   role: 'user' | 'assistant';
   content: string;
 }
+
+export interface IgrisHistoryItem {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export interface FeedbackRequest {
+  category: 'bug' | 'feedback' | 'query';
+  subject: string;
+  message: string;
+  contactEmail?: string;
+}
+
+export interface FeedbackResponse {
+  sent: boolean;
+  message: string;
+}

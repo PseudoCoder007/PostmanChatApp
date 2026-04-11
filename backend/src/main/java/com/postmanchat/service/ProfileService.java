@@ -7,6 +7,7 @@ import com.postmanchat.web.Authz;
 import com.postmanchat.web.dto.ProfileDto;
 import com.postmanchat.web.dto.UpdateProfileRequest;
 import com.postmanchat.web.dto.UsernameAvailabilityDto;
+import com.postmanchat.web.dto.LoginIdentifierResponse;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -168,6 +169,24 @@ public class ProfileService {
     public UsernameAvailabilityDto checkUsernameAvailability(String username) {
         String normalized = normalizeRequestedUsername(username);
         return new UsernameAvailabilityDto(normalized, !profileRepository.existsByUsernameIgnoreCase(normalized));
+    }
+
+    @Transactional(readOnly = true)
+    public LoginIdentifierResponse resolveLoginIdentifier(String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isBlank()) {
+            throw new IllegalArgumentException("Email or username is required");
+        }
+        if (normalized.contains("@")) {
+            return new LoginIdentifierResponse(normalizeEmail(normalized));
+        }
+        String username = normalizeRequestedUsername(normalized);
+        Profile profile = profileRepository.findByUsernameIgnoreCase(username)
+                .orElseThrow(() -> new IllegalArgumentException("No account found for that username"));
+        if (profile.getEmail() == null || profile.getEmail().isBlank()) {
+            throw new IllegalArgumentException("That username does not support email login");
+        }
+        return new LoginIdentifierResponse(profile.getEmail());
     }
 
     private static String readMetadataName(Jwt jwt) {

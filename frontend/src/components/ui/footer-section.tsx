@@ -14,7 +14,7 @@ const contactLinks = [
   { title: 'WhatsApp', href: 'https://wa.me/919336419699', external: true, icon: MessageCircle },
 ];
 
-export function Footer() {
+export function Footer({ onOpenFeedback }: { onOpenFeedback?: () => void }) {
   return (
     <footer className="app-footer">
       <div className="app-footer__grid">
@@ -23,6 +23,9 @@ export function Footer() {
           <h2 className="app-footer__title">Postman Chat App</h2>
           <p className="app-footer__tagline">
             Real-time chat with playful energy, AI backup, and social features that keep the app feeling alive.
+          </p>
+          <p className="app-footer__subline">
+            Found a bug, have a feature idea, or want help with something confusing? Send it straight through the in-app feedback desk.
           </p>
 
           <div className="app-footer__group">
@@ -47,6 +50,11 @@ export function Footer() {
         <section className="app-footer__contact">
           <div className="app-footer__group">
             <h3 className="app-footer__heading">Contact Us</h3>
+            {onOpenFeedback ? (
+              <button type="button" className="app-footer__feedback-button" onClick={onOpenFeedback}>
+                Report a bug, share feedback, or ask a question
+              </button>
+            ) : null}
             <ul className="app-footer__list app-footer__list--contact">
               {contactLinks.map((link) => (
                 <li key={link.title} className="app-footer__item">
