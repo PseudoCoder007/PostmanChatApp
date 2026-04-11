@@ -6,6 +6,7 @@ import com.postmanchat.repo.ProfileRepository;
 import com.postmanchat.web.Authz;
 import com.postmanchat.web.dto.ProfileDto;
 import com.postmanchat.web.dto.UpdateProfileRequest;
+import com.postmanchat.web.dto.UsernameAvailabilityDto;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,7 +52,15 @@ public class ProfileService {
                             deriveFromEmail(jwt.getClaimAsString("email")),
                             "User"
                     );
-                    String username = generateUniqueUsername(display);
+                    String username = readMetadataUsername(jwt);
+                    if (username == null || username.isBlank()) {
+                        username = generateUniqueUsername(display);
+                    } else {
+                        username = normalizeRequestedUsername(username);
+                        if (profileRepository.existsByUsernameIgnoreCase(username)) {
+                            throw new IllegalArgumentException("Username is already taken");
+                        }
+                    }
                     Profile created = new Profile(id, display, username, null);
                     created.setEmail(normalizeEmail(jwt.getClaimAsString("email")));
                     return DtoMapper.toProfileDto(profileRepository.save(created), null);
@@ -82,10 +91,7 @@ public class ProfileService {
             profile.setDisplayName(request.displayName().trim());
         }
         if (request.username() != null) {
-            String username = request.username().trim().toLowerCase();
-            if (!USERNAME_PATTERN.matcher(username).matches()) {
-                throw new IllegalArgumentException("Username must be 3-24 chars: lowercase letters, numbers, underscore");
-            }
+            String username = normalizeRequestedUsername(request.username());
             if (!username.equalsIgnoreCase(profile.getUsername()) && profileRepository.existsByUsernameIgnoreCase(username)) {
                 throw new IllegalArgumentException("Username is already taken");
             }
@@ -158,6 +164,12 @@ public class ProfileService {
         return profileRepository.findById(userId);
     }
 
+    @Transactional(readOnly = true)
+    public UsernameAvailabilityDto checkUsernameAvailability(String username) {
+        String normalized = normalizeRequestedUsername(username);
+        return new UsernameAvailabilityDto(normalized, !profileRepository.existsByUsernameIgnoreCase(normalized));
+    }
+
     private static String readMetadataName(Jwt jwt) {
         Object meta = jwt.getClaim("user_metadata");
         if (meta instanceof Map<?, ?> map) {
@@ -168,6 +180,17 @@ public class ProfileService {
             Object dn = map.get("display_name");
             if (dn != null && !dn.toString().isBlank()) {
                 return dn.toString().trim();
+            }
+        }
+        return null;
+    }
+
+    private static String readMetadataUsername(Jwt jwt) {
+        Object meta = jwt.getClaim("user_metadata");
+        if (meta instanceof Map<?, ?> map) {
+            Object username = map.get("username");
+            if (username != null && !username.toString().isBlank()) {
+                return username.toString().trim();
             }
         }
         return null;
@@ -195,6 +218,14 @@ public class ProfileService {
 
     private static String normalizeEmail(String email) {
         return email == null || email.isBlank() ? null : email.trim().toLowerCase();
+    }
+
+    private static String normalizeRequestedUsername(String username) {
+        String normalized = username == null ? "" : username.trim().toLowerCase();
+        if (!USERNAME_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("Username must be 3-24 chars: lowercase letters, numbers, underscore");
+        }
+        return normalized;
     }
 
     private String generateUniqueUsername(String seed) {

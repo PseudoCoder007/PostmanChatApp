@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -10,6 +10,7 @@ import { authLoginRedirectUrl, supabase } from '@/lib/supabase';
 
 const companyLogoSrc = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='18' fill='%230a0a0a'/%3E%3Cpath d='M23 22h34c4.4 0 8 3.6 8 8v20c0 4.4-3.6 8-8 8H40l-8 8v-8h-9c-4.4 0-8-3.6-8-8V30c0-4.4 3.6-8 8-8Z' fill='white'/%3E%3C/svg%3E";
 const USERNAME_PATTERN = /^[a-z0-9_]{3,24}$/;
+type UsernameStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken' | 'error';
 
 export default function SignupPage() {
   const nav = useNavigate();
@@ -20,6 +21,67 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
+  const [usernameMessage, setUsernameMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const normalizedUsername = username.trim().toLowerCase();
+
+    if (!normalizedUsername) {
+      setUsernameStatus('idle');
+      setUsernameMessage(null);
+      return;
+    }
+
+    if (!USERNAME_PATTERN.test(normalizedUsername)) {
+      setUsernameStatus('invalid');
+      setUsernameMessage('Use 3-24 lowercase letters, numbers, or underscore.');
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setUsernameStatus('checking');
+      setUsernameMessage('Checking username availability...');
+
+      try {
+        const response = await fetch(
+          resolveApiUrl(`/api/public/usernames/availability?username=${encodeURIComponent(normalizedUsername)}`),
+          {
+            signal: controller.signal,
+            headers: { Accept: 'application/json' },
+          },
+        );
+
+        if (!response.ok) {
+          setUsernameStatus('error');
+          setUsernameMessage('Username check is unavailable right now. Try again in a moment.');
+          return;
+        }
+
+        const availability = await response.json() as { available?: boolean };
+        if (availability.available) {
+          setUsernameStatus('available');
+          setUsernameMessage('Username is available.');
+          return;
+        }
+
+        setUsernameStatus('taken');
+        setUsernameMessage('That username is already taken.');
+      } catch (availabilityError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setUsernameStatus('error');
+        setUsernameMessage('Username check is unavailable right now. Try again in a moment.');
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [username]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,8 +108,23 @@ export default function SignupPage() {
       return;
     }
 
-    const availabilityResponse = await fetch(resolveApiUrl(`/api/public/usernames/availability?username=${encodeURIComponent(normalizedUsername)}`));
-    if (!availabilityResponse.ok) {
+    if (usernameStatus === 'checking') {
+      setBusy(false);
+      const message = 'Still checking that username. Give it a second and try again.';
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
+    if (usernameStatus === 'taken') {
+      setBusy(false);
+      const message = 'That username is already taken. Please choose another one.';
+      setError(message);
+      toast.error(message);
+      return;
+    }
+
+    if (usernameStatus === 'error') {
       setBusy(false);
       const message = 'Could not verify username availability right now. Please try again.';
       setError(message);
@@ -55,10 +132,9 @@ export default function SignupPage() {
       return;
     }
 
-    const availability = await availabilityResponse.json() as { available?: boolean };
-    if (!availability.available) {
+    if (usernameStatus !== 'available') {
       setBusy(false);
-      const message = 'That username is already taken. Please choose another one.';
+      const message = 'Choose a valid username first so we can verify it is available.';
       setError(message);
       toast.error(message);
       return;
@@ -122,6 +198,7 @@ export default function SignupPage() {
           <label className="field">
             Username
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())} required minLength={3} maxLength={24} placeholder="lowercase letters, numbers, underscore" />
+            {usernameMessage ? <span className={`auth-field-status auth-field-status-${usernameStatus}`}>{usernameMessage}</span> : null}
           </label>
           <label className="field">
             Email

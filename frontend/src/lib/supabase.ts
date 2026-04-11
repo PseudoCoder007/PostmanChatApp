@@ -15,14 +15,12 @@ if (!url || !anon) {
 
 export const supabase = createClient(url ?? '', anon ?? '');
 
-export async function startSupabaseOAuth(provider: 'google' | 'facebook') {
+export async function startSupabaseOAuth(provider: 'google') {
   return supabase.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo: authLoginRedirectUrl || undefined,
-      ...(provider === 'google'
-        ? { queryParams: { access_type: 'offline', prompt: 'consent' } }
-        : {}),
+      queryParams: { access_type: 'offline', prompt: 'consent' },
     },
   });
 }

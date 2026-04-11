@@ -658,6 +658,32 @@ html[data-theme="light"] .error { color: #b91c1c; }
   line-height: 1.6;
 }
 
+.auth-field-status {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.15rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.auth-field-status-idle {
+  color: var(--text-soft);
+}
+
+.auth-field-status-checking {
+  color: var(--text-soft);
+}
+
+.auth-field-status-available {
+  color: var(--success-text);
+}
+
+.auth-field-status-taken,
+.auth-field-status-invalid,
+.auth-field-status-error {
+  color: #fca5a5;
+}
+
 .auth-inline-label {
   display: flex;
   align-items: center;

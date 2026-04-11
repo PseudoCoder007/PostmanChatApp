@@ -24,6 +24,7 @@ public class SecurityConfig {
                         "/actuator/prometheus"
                 ).permitAll()
                 .requestMatchers("/ws/**").permitAll()
+                .requestMatchers("/api/public/**").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
         );
