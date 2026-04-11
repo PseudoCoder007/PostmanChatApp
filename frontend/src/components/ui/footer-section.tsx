@@ -1,4 +1,4 @@
-import { Code2, Mail, MessageCircle } from 'lucide-react';
+import { Code2, Globe, Mail, MessageCircle } from 'lucide-react';
 
 const featureLinks = [
   { title: 'Direct Messages', href: '/' },
@@ -8,6 +8,7 @@ const featureLinks = [
 ];
 
 const contactLinks = [
+  { title: 'Dev Portfolio', href: 'https://pseudocoder007.github.io/my-portfolio/', external: true, icon: Globe, blurb: 'Know the builder behind the stack' },
   { title: 'GitHub', href: 'https://github.com/PseudoCoder007', external: true, icon: Code2 },
   { title: 'Contact Email', href: 'mailto:alisaif006123@gmail.com', external: true, icon: Mail },
   { title: 'WhatsApp', href: 'https://wa.me/919336419699', external: true, icon: MessageCircle },
@@ -58,7 +59,10 @@ export function Footer() {
                     <span className="app-footer__icon-wrap">
                       <link.icon className="app-footer__icon" />
                     </span>
-                    <span>{link.title}</span>
+                    <span className="app-footer__contact-copy">
+                      <strong>{link.title}</strong>
+                      {'blurb' in link ? <small>{link.blurb}</small> : null}
+                    </span>
                   </a>
                 </li>
               ))}
