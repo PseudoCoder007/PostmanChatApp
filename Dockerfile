@@ -4,6 +4,7 @@ WORKDIR /app
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_SUPABASE_STORAGE_BUCKET=chat-uploads
+ARG VITE_PUBLIC_SITE_URL
 ARG VITE_API_BASE_URL
 
 COPY frontend/package*.json frontend/
@@ -16,6 +17,7 @@ COPY frontend/ frontend/
 RUN echo "VITE_SUPABASE_URL=${VITE_SUPABASE_URL}" > frontend/.env && \
     echo "VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}" >> frontend/.env && \
     echo "VITE_SUPABASE_STORAGE_BUCKET=${VITE_SUPABASE_STORAGE_BUCKET}" >> frontend/.env && \
+    echo "VITE_PUBLIC_SITE_URL=${VITE_PUBLIC_SITE_URL}" >> frontend/.env && \
     echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" >> frontend/.env
 
 RUN cd frontend && npm run build

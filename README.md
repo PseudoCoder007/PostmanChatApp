@@ -164,7 +164,8 @@ Set these in `frontend/.env`:
 ```env
 VITE_SUPABASE_URL=https://<your-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<your_anon_key>
-VITE_API_BASE_URL=
+VITE_PUBLIC_SITE_URL=https://postmanchat.live
+VITE_API_BASE_URL=https://postmanchat.live
 VITE_SUPABASE_STORAGE_BUCKET=chat-uploads
 ```
 
@@ -181,11 +182,24 @@ Create a Supabase project and collect:
 - Database password
 - Project ref
 
-### 2. Storage bucket
+### 2. Auth URLs and providers
+
+Configure Supabase Auth before testing email confirmation, password reset, or OAuth:
+
+- Set the Supabase Auth Site URL to your deployed frontend origin such as `https://your-frontend-domain.example.com`
+- Add redirect URLs for `https://your-frontend-domain.example.com/login` and `https://your-frontend-domain.example.com/reset-password`
+- Keep `VITE_PUBLIC_SITE_URL` in the frontend aligned with that same deployed frontend origin
+- Enable the Google provider in Supabase Auth and set its callback URL in Google Cloud
+- Enable the Facebook provider in Supabase Auth and set its callback URL in Meta for Developers
+- Update the Supabase confirmation and password-reset email templates with your branded copy and links to the deployed app
+
+The app intentionally keeps Supabase-hosted email delivery in place. Do not replace confirmation or reset emails with a custom backend mailer.
+
+### 3. Storage bucket
 
 Create a public Storage bucket named `chat-uploads` or change the frontend env var to match your chosen bucket.
 
-### 3. Storage policy
+### 4. Storage policy
 
 You need a policy that allows authenticated users to upload files to the selected bucket. A minimal example:
 
@@ -204,6 +218,83 @@ using (bucket_id = 'chat-uploads');
 ```
 
 Adjust policies to your security requirements before production use.
+
+### 5. Auth flow notes
+
+- Email signup confirmation should redirect back to `/login`
+- Password reset emails should redirect back to `/reset-password`
+- Google and Facebook OAuth should redirect back to `/login` so the frontend can complete the Supabase session and route the user into the app
+- Backend-served `/uploads/...` attachments are resolved against `VITE_API_BASE_URL` in production and the Vite proxy in local development
+
+## EC2 domain setup with Nginx and SSL
+
+The repo includes an EC2 deployment workflow at [`.github/workflows/deploy-ec2.yml`](C:/Users/alisa/PostWebAppforMessaging/.github/workflows/deploy-ec2.yml), an Nginx template at [`deploy/nginx/postmanchat.live.conf.template`](C:/Users/alisa/PostWebAppforMessaging/deploy/nginx/postmanchat.live.conf.template), and a bootstrap script at [`deploy/ec2/setup-nginx-certbot.sh`](C:/Users/alisa/PostWebAppforMessaging/deploy/ec2/setup-nginx-certbot.sh).
+
+Production traffic flow:
+
+```text
+GoDaddy DNS -> EC2 public IP -> Nginx -> Docker container on 127.0.0.1:8080
+```
+
+### 1. DNS records in GoDaddy
+
+Create these A records:
+
+- `@` -> `13.201.50.166`
+- `www` -> `13.201.50.166`
+
+### 2. EC2 security group
+
+Allow these inbound ports:
+
+- `80/tcp` for HTTP and Let's Encrypt validation
+- `443/tcp` for HTTPS
+- `22/tcp` only from your admin IP if possible
+
+### 3. GitHub Actions secrets for EC2 deploy
+
+Required secrets:
+
+- `EC2_HOST`
+- `EC2_SSH_KEY`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `DATABASE_URL`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+- `SUPABASE_JWT_ISSUER`
+
+Recommended secrets:
+
+- `LETSENCRYPT_EMAIL`
+- `IGRIS_NVIDIA_API_KEY`
+- `EMAIL_NOTIFICATIONS_ENABLED`
+- `EMAIL_FROM`
+- `MAIL_HOST`
+- `MAIL_PORT`
+- `MAIL_USERNAME`
+- `MAIL_PASSWORD`
+- `MAIL_SMTP_AUTH`
+- `MAIL_SMTP_STARTTLS`
+
+### 4. What the EC2 workflow does
+
+- Builds the frontend with `VITE_PUBLIC_SITE_URL=https://postmanchat.live`
+- Builds the frontend with `VITE_API_BASE_URL=https://postmanchat.live`
+- Runs the container on `127.0.0.1:8080` instead of exposing it publicly on port `80`
+- Installs and configures Nginx on the EC2 instance
+- Requests and installs a Let's Encrypt certificate when `LETSENCRYPT_EMAIL` is set
+- Reloads Nginx after deployment
+
+### 5. Supabase production URLs
+
+Update Supabase Auth to use:
+
+- Site URL: `https://postmanchat.live`
+- Redirect URL: `https://postmanchat.live/login`
+- Redirect URL: `https://postmanchat.live/reset-password`
+
+If you support `www`, keep `https://www.postmanchat.live` redirected to `https://postmanchat.live`.
 
 ## Running locally
 

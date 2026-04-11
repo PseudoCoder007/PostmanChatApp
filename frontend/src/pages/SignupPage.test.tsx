@@ -8,7 +8,8 @@ const { signUp } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/supabase', () => ({
-  publicSiteUrl: 'http://13.201.50.166',
+  authLoginRedirectUrl: 'https://postmanchat.live/login',
+  startSupabaseOAuth: vi.fn(),
   supabase: {
     auth: {
       signUp,
@@ -41,7 +42,7 @@ describe('SignupPage', () => {
       expect(signUp).toHaveBeenCalledWith(expect.objectContaining({
         email: 'demo@example.com',
         options: expect.objectContaining({
-          emailRedirectTo: 'http://13.201.50.166',
+          emailRedirectTo: 'https://postmanchat.live/login',
         }),
       }));
     });

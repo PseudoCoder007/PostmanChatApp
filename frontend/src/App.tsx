@@ -1,14 +1,25 @@
-import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { RequireAuth } from './components/RequireAuth';
+import { getSupabaseRedirectPath } from './lib/authRedirect';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const SignupPage = lazy(() => import('./pages/SignupPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 
 export default function App() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const redirectPath = getSupabaseRedirectPath(location.hash, location.search);
+    if (!redirectPath || location.pathname === redirectPath) {
+      return;
+    }
+    navigate({ pathname: redirectPath, search: location.search, hash: location.hash }, { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
 
   return (
     <div className="app-shell">
@@ -25,6 +36,7 @@ export default function App() {
             <Routes location={location}>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route
                 path="/"
                 element={

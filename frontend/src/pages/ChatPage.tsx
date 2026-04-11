@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Moon, Sun } from 'lucide-react';
 import { useStompRoom } from '@/hooks/useStompRoom';
-import { apiFetch, apiFetchForm } from '@/lib/api';
+import { apiFetch, apiFetchForm, resolveAttachmentUrl } from '@/lib/api';
 import { getUserFriendlyErrorMessage } from '@/lib/errorMessages';
 import { supabase } from '@/lib/supabase';
 import { useTutorial } from '@/hooks/useTutorial';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { LevelUpCelebration } from '@/components/LevelUpCelebration';
+import { Footer } from '@/components/ui/footer-section';
 import type { Attachment, FriendRequest, IgrisChatResponse, IgrisChatTurn, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomVisibility, TypingEvent, WsMessagePayload } from '@/types/chat';
 
 type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile';
@@ -694,6 +695,9 @@ export default function ChatPage() {
           <section className="panel"><div className="section-header compact"><div><span className="eyebrow">Daily briefing</span><h3>What matters now</h3></div></div><div className="briefing-list"><div className="briefing-row"><strong>{activeRoom ? getRoomTitle(activeRoom) : 'No active room'}</strong><span>{activeRoom ? (activeRoom.type === 'direct' ? 'Private line active.' : 'Squad channel active.') : 'Pick a room to see live traffic.'}</span></div><div className="briefing-row"><strong>{activeQuests.length} active mission{activeQuests.length === 1 ? '' : 's'}</strong><span>{activeQuests.length ? 'Complete verified actions for XP and coins.' : 'Generate a mission to start earning.'}</span></div><div className="briefing-row"><strong>{focusMissions[0]?.title ?? 'No focus card'}</strong><span>{focusMissions[0]?.description ?? 'Side quests rotate every 10 minutes.'}</span></div><div className="briefing-row"><strong>{me?.canUseIgris ? 'Igris unlocked' : 'Igris locked'}</strong><span>{me?.canUseIgris ? 'Use Igris for jokes, emotional support, chaotic prompts, workout dares, and social recovery missions.' : `Earn ${igrisCoinsRemaining} more coin${igrisCoinsRemaining === 1 ? '' : 's'} to unlock it.`}</span></div></div></section>
         </aside>
       </section>
+      <div className="mt-8">
+        <Footer />
+      </div>
       <TutorialOverlay />
       {levelUpCelebration && (
         <LevelUpCelebration
@@ -781,9 +785,10 @@ function getXpProgressToNextLevel(totalXp: number): { current: number; required:
 }
 
 function AttachmentPreview({ attachment }: { attachment: Attachment }) {
-  if (attachment.contentType.startsWith('image/')) return <img className="attachment-preview" src={attachment.publicUrl} alt={attachment.originalName} />;
-  if (attachment.contentType.startsWith('video/')) return <video className="attachment-preview" src={attachment.publicUrl} controls />;
-  return <a href={attachment.publicUrl} target="_blank" rel="noreferrer" download={attachment.originalName} className="attachment-card"><span className="attachment-icon">{fileBadge(attachment.originalName)}</span><span><strong>{attachment.originalName}</strong><small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small></span></a>;
+  const resolvedUrl = resolveAttachmentUrl(attachment.publicUrl);
+  if (attachment.contentType.startsWith('image/')) return <img className="attachment-preview" src={resolvedUrl} alt={attachment.originalName} />;
+  if (attachment.contentType.startsWith('video/')) return <video className="attachment-preview" src={resolvedUrl} controls />;
+  return <a href={resolvedUrl} target="_blank" rel="noreferrer" download={attachment.originalName} className="attachment-card"><span className="attachment-icon">{fileBadge(attachment.originalName)}</span><span><strong>{attachment.originalName}</strong><small>{Math.ceil(attachment.sizeBytes / 1024)} KB</small></span></a>;
 }
 
 function readSoundPreference() {

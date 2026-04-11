@@ -7,6 +7,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      APP_DOMAIN: postmanchat.live
+      APP_WWW_DOMAIN: www.postmanchat.live
 
     steps:
     - name: Checkout code
@@ -30,6 +33,16 @@ jobs:
             cd postman-chat
           fi
 
+          sudo mkdir -p /etc/postman-chat
+          sudo cp deploy/nginx/postmanchat.live.conf.template /etc/postman-chat/nginx.conf.template
+          sudo cp deploy/ec2/setup-nginx-certbot.sh /usr/local/bin/postman-chat-setup-nginx
+          sudo chmod +x /usr/local/bin/postman-chat-setup-nginx
+
+          APP_DOMAIN="${{ env.APP_DOMAIN }}" \
+          APP_WWW_DOMAIN="${{ env.APP_WWW_DOMAIN }}" \
+          LETSENCRYPT_EMAIL="${{ secrets.LETSENCRYPT_EMAIL }}" \
+          /usr/local/bin/postman-chat-setup-nginx
+
           # Stop and remove old container
           docker stop postman-chat || true
           docker rm postman-chat || true
@@ -39,19 +52,20 @@ jobs:
             --build-arg VITE_SUPABASE_URL="${{ secrets.VITE_SUPABASE_URL }}" \
             --build-arg VITE_SUPABASE_ANON_KEY="${{ secrets.VITE_SUPABASE_ANON_KEY }}" \
             --build-arg VITE_SUPABASE_STORAGE_BUCKET="chat-uploads" \
-            --build-arg VITE_API_BASE_URL="http://${{ secrets.EC2_HOST }}" \
+            --build-arg VITE_PUBLIC_SITE_URL="https://${{ env.APP_DOMAIN }}" \
+            --build-arg VITE_API_BASE_URL="https://${{ env.APP_DOMAIN }}" \
             .
 
-          # Run container (PUBLIC ACCESS)
+          # Run container behind Nginx
           docker run -d --name postman-chat \
-            -p 80:8080 \
+            -p 127.0.0.1:8080:8080 \
             --restart always \
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             -e DB_USERNAME="${{ secrets.DB_USERNAME }}" \
             -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
             -e SUPABASE_JWT_ISSUER="${{ secrets.SUPABASE_JWT_ISSUER }}" \
-            -e CORS_ORIGINS="${{ secrets.CORS_ORIGINS }}" \
-            -e STORAGE_BASE_URL="${{ secrets.STORAGE_BASE_URL }}" \
+            -e CORS_ORIGINS="https://${{ env.APP_DOMAIN }},https://${{ env.APP_WWW_DOMAIN }}" \
+            -e STORAGE_BASE_URL="https://${{ env.APP_DOMAIN }}" \
             -e IGRIS_NVIDIA_API_KEY="${{ secrets.IGRIS_NVIDIA_API_KEY }}" \
             -e EMAIL_NOTIFICATIONS_ENABLED="${{ secrets.EMAIL_NOTIFICATIONS_ENABLED }}" \
             -e EMAIL_FROM="${{ secrets.EMAIL_FROM }}" \
@@ -62,5 +76,7 @@ jobs:
             -e MAIL_SMTP_AUTH="${{ secrets.MAIL_SMTP_AUTH }}" \
             -e MAIL_SMTP_STARTTLS="${{ secrets.MAIL_SMTP_STARTTLS }}" \
             postman-chat
+
+          sudo systemctl reload nginx
 
           
