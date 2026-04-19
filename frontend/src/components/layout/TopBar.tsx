@@ -1,4 +1,4 @@
-import { Search, Coins, Zap, Bell, Settings2, Sun, Moon } from 'lucide-react';
+import { Search, Coins, Zap, Bell, Settings2, Sun, Moon, Menu } from 'lucide-react';
 import type { Profile } from '../../types/chat';
 
 interface TopBarProps {
@@ -11,6 +11,7 @@ interface TopBarProps {
   onNotificationsClick: () => void;
   onSettingsClick: () => void;
   onAvatarClick: () => void;
+  onMenuClick: () => void;
 }
 
 function initials(name: string | null | undefined): string {
@@ -21,9 +22,14 @@ function initials(name: string | null | undefined): string {
 export default function TopBar({
   me, coins, xp, unreadCount, isDark, toggleTheme,
   onNotificationsClick, onSettingsClick, onAvatarClick,
+  onMenuClick,
 }: TopBarProps) {
   return (
     <header className="pm-topbar">
+      <button className="pm-icon-btn pm-topbar__menu" onClick={onMenuClick} title="Open menu">
+        <Menu size={18} />
+      </button>
+
       <div className="pm-topbar__search">
         <Search className="pm-topbar__search-icon" />
         <input placeholder="Search chats, rooms, people..." />

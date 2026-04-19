@@ -17,6 +17,8 @@ interface SidebarProps {
   unreadCount: number;
   isDark: boolean;
   toggleTheme: () => void;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: React.ReactNode }[] = [
@@ -38,9 +40,20 @@ function initials(name: string | null | undefined): string {
 export default function Sidebar({
   me, activeView, onNavigate, onSignOut,
   onLaunchMission, launchPending, unreadCount,
+  mobileOpen = false, onCloseMobile,
 }: SidebarProps) {
+  function handleNavigate(view: ViewKey) {
+    onNavigate(view);
+    onCloseMobile?.();
+  }
+
+  function handleSignOut() {
+    onCloseMobile?.();
+    onSignOut();
+  }
+
   return (
-    <aside className="pm-sidebar">
+    <aside className={`pm-sidebar${mobileOpen ? ' open' : ''}`}>
       {/* Brand */}
       <div className="pm-sidebar__brand">
         <div className="pm-sidebar__brand-icon">
@@ -74,7 +87,7 @@ export default function Sidebar({
           <button
             key={item.key}
             className={`pm-nav-item${activeView === item.key ? ' active' : ''}`}
-            onClick={() => onNavigate(item.key)}
+            onClick={() => handleNavigate(item.key)}
           >
             <span className="pm-nav-icon">{item.icon}</span>
             {item.label}
@@ -88,7 +101,7 @@ export default function Sidebar({
 
         <button
           className={`pm-nav-item${activeView === 'settings' ? ' active' : ''}`}
-          onClick={() => onNavigate('settings')}
+          onClick={() => handleNavigate('settings')}
         >
           <span className="pm-nav-icon"><Settings2 size={18} /></span>
           Settings
@@ -97,7 +110,7 @@ export default function Sidebar({
 
       {/* Footer */}
       <div className="pm-sidebar__footer">
-        <button className="pm-sidebar__signout" onClick={onSignOut}>
+        <button className="pm-sidebar__signout" onClick={handleSignOut}>
           <LogOut size={14} />
           Sign Out
         </button>

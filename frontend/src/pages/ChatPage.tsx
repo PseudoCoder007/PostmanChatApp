@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Brain } from 'lucide-react';
+import { Brain, MessageCircle, Users, Target, Trophy, User, Settings2 } from 'lucide-react';
 import { useStompRoom } from '@/hooks/useStompRoom';
 import { apiFetch, apiFetchForm, resolveAttachmentUrl } from '@/lib/api';
 import { getUserFriendlyErrorMessage } from '@/lib/errorMessages';
@@ -60,6 +60,7 @@ export default function ChatPage() {
   const previousUnreadCountRef = useRef(0);
   const [levelUpCelebration, setLevelUpCelebration] = useState<{ oldLevel: number; newLevel: number; title: string } | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>('chat');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [draft, setDraft] = useState('');
   const [groupName, setGroupName] = useState('');
@@ -276,6 +277,10 @@ export default function ChatPage() {
       // Ignore storage failures; the celebration simply won't persist across refreshes.
     }
   }, [me?.id, me?.level, me?.title, soundEnabled]);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [activeView]);
 
   function onWsEvent(payload: WsMessagePayload) {
     if (!activeRoomId) return;
@@ -566,7 +571,11 @@ export default function ChatPage() {
         unreadCount={unread.length}
         isDark={isDark}
         toggleTheme={toggleTheme}
+        mobileOpen={sidebarOpen}
+        onCloseMobile={() => setSidebarOpen(false)}
       />
+
+      {sidebarOpen && <button className="pm-sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-label="Close menu" />}
 
       {/* ── Main area ────────────────────────────────────── */}
       <div className="pm-main">
@@ -580,6 +589,7 @@ export default function ChatPage() {
           onNotificationsClick={() => setActiveView('board')}
           onSettingsClick={() => setActiveView('settings')}
           onAvatarClick={() => setActiveView('profile')}
+          onMenuClick={() => setSidebarOpen(true)}
         />
 
         <main className={`pm-content${activeView === 'chat' ? ' pm-content--chat' : ''}`}>
@@ -792,6 +802,26 @@ export default function ChatPage() {
           onComplete={() => setLevelUpCelebration(null)}
         />
       )}
+
+      <nav className="pm-mobile-nav" aria-label="Mobile navigation">
+        {[
+          { key: 'chat' as ViewKey, label: 'Chat', icon: <MessageCircle size={20} /> },
+          { key: 'people' as ViewKey, label: 'People', icon: <Users size={20} /> },
+          { key: 'quests' as ViewKey, label: 'Quests', icon: <Target size={20} /> },
+          { key: 'board' as ViewKey, label: 'Board', icon: <Trophy size={20} /> },
+          { key: 'profile' as ViewKey, label: 'Profile', icon: <User size={20} /> },
+          { key: 'settings' as ViewKey, label: 'Menu', icon: <Settings2 size={20} /> },
+        ].map(item => (
+          <button
+            key={item.key}
+            className={`pm-mobile-nav__btn${activeView === item.key ? ' active' : ''}`}
+            onClick={() => item.key === 'settings' ? setSidebarOpen(true) : setActiveView(item.key)}
+          >
+            {item.icon}
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
