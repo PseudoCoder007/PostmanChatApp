@@ -8,6 +8,7 @@ frontend/.env.local
 backend/target/
 backend/.m2/
 backend/.env
+backend/backend/uploads/
 
 # Local toolchains
 .tools/
@@ -20,3 +21,10 @@ backend/.env
 # Logs
 *.log
 *.err.log
+
+# Local design & workspace files (do not push)
+ui photos/
+postman-chat-app-google-studio-v2.zip
+postman-chat-app-google/
+.claude/
+CLAUDE_DEV_PROTOCOL.md

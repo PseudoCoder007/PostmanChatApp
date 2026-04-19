@@ -1,17 +1,45 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Mail } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
-import { AuthForm } from '@/components/ui/sign-in-1';
-import { Button } from '@/components/ui/button';
 import { clearSupabaseRedirectParams, finalizeSupabaseRedirect } from '@/lib/authRedirect';
 import { authPasswordResetUrl, startSupabaseOAuth, supabase } from '@/lib/supabase';
 
-const companyLogoSrc = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='18' fill='%230a0a0a'/%3E%3Cpath d='M20 24h40v8H20zm0 16h40v8H20zm0 16h26v8H20z' fill='white'/%3E%3C/svg%3E";
+const HERO_SLIDES = [
+  {
+    eyebrow: 'Welcome back',
+    headline: 'Conversations\nthat keep teams\nin motion.',
+    accent: 'in motion.',
+    sub: 'PostmanChat keeps people, context, and action aligned so you can return to the discussions that matter without losing momentum.',
+  },
+  {
+    eyebrow: 'Built for active communities',
+    headline: 'Reconnect.\nRespond.\nMove forward.',
+    accent: 'Move forward.',
+    sub: 'From quick updates to high-energy community threads, every space is designed to help teams stay aligned and act faster.',
+  },
+  {
+    eyebrow: 'Designed for clarity',
+    headline: 'One workspace.\nClear signals.\nStronger follow-through.',
+    accent: 'Stronger follow-through.',
+    sub: 'Bring messaging, accountability, and engagement together in a single experience that keeps work and community moving.',
+  },
+];
+
+const FEATURES = [
+  { icon: '+', text: 'Real-time rooms and direct chats for fast coordination' },
+  { icon: '+', text: 'Progress systems that turn activity into visible momentum' },
+  { icon: '+', text: 'Igris AI support when your community needs a smarter nudge' },
+  { icon: '+', text: 'A focused brand experience built for engagement at scale' },
+];
+
+function getDailySlide() {
+  return HERO_SLIDES[Math.floor(Date.now() / 86400000) % HERO_SLIDES.length];
+}
 
 export default function LoginPage() {
+  const slide = getDailySlide();
   const nav = useNavigate();
   const location = useLocation();
   const [identifier, setIdentifier] = useState('');
@@ -25,39 +53,23 @@ export default function LoginPage() {
 
   useEffect(() => {
     let mounted = true;
-
     supabase.auth.getSession().then(({ data }) => {
-      if (mounted && data.session) {
-        nav('/', { replace: true });
-      }
+      if (mounted && data.session) nav('/', { replace: true });
     });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
-      if (!mounted || !session) {
-        return;
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      if (!mounted || !session) return;
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
         nav('/', { replace: true });
       }
     });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, [nav]);
 
   useEffect(() => {
     let cancelled = false;
-
     async function handleAuthRedirect() {
       const result = await finalizeSupabaseRedirect(location.hash, location.search);
-      if (cancelled || result.kind === 'none') {
-        return;
-      }
-
+      if (cancelled || result.kind === 'none') return;
       clearSupabaseRedirectParams();
       if (result.kind === 'error') {
         setNotice(null);
@@ -65,10 +77,7 @@ export default function LoginPage() {
         toast.error(result.message ?? 'Authentication could not be completed.');
         return;
       }
-      if (result.kind === 'recovery') {
-        nav('/reset-password', { replace: true });
-        return;
-      }
+      if (result.kind === 'recovery') { nav('/reset-password', { replace: true }); return; }
       if (result.kind === 'signup') {
         setError(null);
         setNotice(result.message ?? 'Email confirmed. You can sign in now.');
@@ -76,15 +85,12 @@ export default function LoginPage() {
         return;
       }
       if (result.kind === 'session') {
-        toast.success('Signed in successfully.');
+        toast.success('Signed in. Good to have you back.');
         nav('/', { replace: true });
       }
     }
-
     void handleAuthRedirect();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [location.hash, location.search, nav]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -95,7 +101,7 @@ export default function LoginPage() {
     if (!email.includes('@')) {
       const lookup = await fetch(`/api/public/auth/login-identifier?value=${encodeURIComponent(email)}`);
       if (!lookup.ok) {
-        const message = 'We could not find an account for that email or username.';
+        const message = 'We could not find anyone with that email or username. Double-check and try again.';
         setBusy(false);
         setError(message);
         toast.error(message);
@@ -111,23 +117,22 @@ export default function LoginPage() {
       toast.error(err.message);
       return;
     }
-    toast.success('Signed in');
+    toast.success('Welcome back. Your workspace is ready.');
     nav('/');
   }
 
   async function onForgotPassword() {
     let normalizedEmail = identifier.trim().toLowerCase();
     if (!normalizedEmail) {
-      const message = 'Enter your email or username first so we know where to send the reset link.';
+      const message = 'Enter your email or username above first so we know where to send the reset link.';
       setError(message);
       toast.error(message);
       return;
     }
-
     if (!normalizedEmail.includes('@')) {
       const lookup = await fetch(`/api/public/auth/login-identifier?value=${encodeURIComponent(normalizedEmail)}`);
       if (!lookup.ok) {
-        const message = 'We could not find an account for that email or username.';
+        const message = 'We could not find an account with that username. Try your email instead.';
         setError(message);
         toast.error(message);
         return;
@@ -135,22 +140,19 @@ export default function LoginPage() {
       const body = await lookup.json() as { email?: string };
       normalizedEmail = body.email?.trim().toLowerCase() ?? '';
     }
-
     setError(null);
     setResetBusy(true);
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: authPasswordResetUrl || undefined,
     });
     setResetBusy(false);
-
     if (resetError) {
       setError(resetError.message);
       toast.error(resetError.message);
       return;
     }
-
-    toast.success('Password reset email sent. Check your inbox for the secure reset link.');
-    setNotice(`Reset instructions sent to ${normalizedEmail}. Use the link in that email to choose a new password.`);
+    toast.success('Reset link sent. Check your inbox.');
+    setNotice(`We sent a password reset link to ${normalizedEmail}. Check your inbox and spam folder if it does not show up right away.`);
   }
 
   async function startOAuth(provider: 'google') {
@@ -159,7 +161,6 @@ export default function LoginPage() {
     setOauthBusy(provider);
     const { error: oauthError } = await startSupabaseOAuth(provider);
     setOauthBusy(null);
-
     if (oauthError) {
       setError(oauthError.message);
       toast.error(oauthError.message);
@@ -167,59 +168,148 @@ export default function LoginPage() {
   }
 
   return (
-    <motion.div className="auth-shell" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-      <div className="auth-backdrop-copy">
-        <span className="auth-kicker">Postman Chat App</span>
-        <h1>One place for friends, rooms, quests, and AI-powered conversation.</h1>
-        <p>Chat in real time, build public or private groups, track levels and coins, and unlock Igris for support, jokes, and side quests.</p>
-        <p>Use email sign-in or jump in with Google to get back into your rooms, quests, and daily conversations faster.</p>
-      </div>
-      <AuthForm
-        logoSrc={companyLogoSrc}
-        logoAlt="Postman Chat"
-        title="Welcome back"
-        description="Sign in to continue your chats, missions, and live rooms."
-        secondaryActions={[
-          {
-            label: oauthBusy === 'google' ? 'Connecting Google...' : 'Continue with Google',
-            icon: <GoogleIcon />,
-            onClick: () => void startOAuth('google'),
-          },
-        ]}
-        footerContent={(
-          <>
-            No account? <Link to="/signup">Create one</Link>
-          </>
-        )}
-      >
-        <form className="stack" onSubmit={onSubmit}>
-          {notice ? <p className="auth-banner auth-banner-success"><CheckCircle2 size={16} />{notice}</p> : null}
-          <label className="field">
-            Email or username
-            <input type="text" autoComplete="username" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
-          </label>
-          <label className="field">
-            <span className="auth-inline-label">
-              <span>Password</span>
-              <button type="button" className="auth-inline-link" onClick={() => void onForgotPassword()} disabled={resetBusy}>
-                {resetBusy ? 'Sending reset...' : 'Forgot password?'}
-              </button>
-            </span>
-            <div className="auth-password-wrap">
-              <input className="auth-password-input" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-              <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((value) => !value)}>
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
+    <div className="auth-shell">
+      <div className="auth-hero">
+        <div className="auth-hero__grid" />
+        <div className="auth-hero__glow auth-hero__glow--top" />
+        <div className="auth-hero__glow auth-hero__glow--bottom" />
+
+        <div className="auth-hero__inner">
+          <div className="auth-brand">
+            <div className="auth-brand__icon">P</div>
+            <span className="auth-brand__name">Postman<span>Chat</span></span>
+          </div>
+
+          <div className="auth-hero__eyebrow">{slide.eyebrow}</div>
+
+          <h1 className="auth-hero__headline">
+            {slide.headline.split('\n').map((line, i) => {
+              const isAccent = line === slide.accent;
+              return (
+                <span key={i} className={isAccent ? 'auth-hero__headline--accent' : ''}>
+                  {line}
+                  <br />
+                </span>
+              );
+            })}
+          </h1>
+
+          <p className="auth-hero__sub">{slide.sub}</p>
+
+          <div className="auth-features">
+            {FEATURES.map(f => (
+              <div key={f.text} className="auth-feature">
+                <span className="auth-feature__dot">{f.icon}</span>
+                <span className="auth-feature__text">{f.text}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="auth-proof">
+            <div className="auth-proof__avatars">
+              {['K', 'S', 'N', 'V', 'D'].map((l, i) => (
+                <div key={i} className="auth-proof__avatar" style={{ zIndex: 5 - i }}>{l}</div>
+              ))}
             </div>
-          </label>
-          {error ? <p className="error">{error}</p> : null}
-          <Button type="submit" className="auth-form-button" disabled={busy}>
-            <Mail size={16} />
-            {busy ? 'Signing in...' : 'Continue with email'}
-          </Button>
-        </form>
-      </AuthForm>
-    </motion.div>
+            <div className="auth-proof__text">
+              <strong>Modern communities</strong> use PostmanChat to keep conversation and action connected
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="auth-form-side">
+        <div className="auth-card">
+          <div className="auth-card__header">
+            <div className="auth-card__icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+            </div>
+            <div>
+              <h1 className="auth-card__title">Welcome back to PostmanChat</h1>
+              <p className="auth-card__sub">Sign in to continue the conversations, updates, and momentum your team relies on.</p>
+            </div>
+          </div>
+
+          {notice && (
+            <div className="auth-notice">
+              <CheckCircle2 size={15} />
+              <span>{notice}</span>
+            </div>
+          )}
+
+          <form onSubmit={onSubmit} className="auth-form">
+            <div className="auth-field">
+              <label className="auth-label">Email or username</label>
+              <div className="auth-input-wrap">
+                <svg className="auth-input-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+                <input
+                  className="auth-input"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="you@email.com or @handle"
+                  value={identifier}
+                  onChange={e => setIdentifier(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="auth-field">
+              <div className="auth-label-row">
+                <label className="auth-label">Password</label>
+                <button
+                  type="button"
+                  className="auth-forgot"
+                  onClick={() => void onForgotPassword()}
+                  disabled={resetBusy}
+                >
+                  {resetBusy ? 'Sending...' : 'Forgot password?'}
+                </button>
+              </div>
+              <div className="auth-input-wrap">
+                <svg className="auth-input-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                <input
+                  className="auth-input"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  placeholder="Your password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+                <button type="button" className="auth-eye" onClick={() => setShowPassword(v => !v)}>
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+
+            {error && <div className="auth-error">{error}</div>}
+
+            <button type="submit" className="auth-btn auth-btn--primary" disabled={busy}>
+              {busy ? <span className="pm-spinner" style={{ width: 16, height: 16 }} /> : null}
+              {busy ? 'Signing you in...' : 'Sign in'}
+            </button>
+          </form>
+
+          <div className="auth-divider"><span>or</span></div>
+
+          <button
+            className="auth-btn auth-btn--google"
+            onClick={() => void startOAuth('google')}
+            disabled={oauthBusy === 'google'}
+            type="button"
+          >
+            {oauthBusy === 'google' ? <span className="pm-spinner" style={{ width: 16, height: 16 }} /> : <GoogleIcon />}
+            Continue with Google
+          </button>
+
+          <p className="auth-switch">
+            New here?{' '}
+            <Link to="/signup">Create your workspace account {'->'}</Link>
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 

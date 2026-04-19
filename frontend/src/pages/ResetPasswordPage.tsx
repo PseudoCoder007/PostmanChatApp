@@ -95,6 +95,7 @@ export default function ResetPasswordPage() {
       <AuthForm
         logoSrc={companyLogoSrc}
         logoAlt="Postman Chat"
+        eyebrow="Recovery Session"
         title="Reset password"
         description="Choose a new password for your account."
         footerContent={(
@@ -107,25 +108,33 @@ export default function ResetPasswordPage() {
           {notice ? <p className="auth-banner auth-banner-success"><CheckCircle2 size={16} />{notice}</p> : null}
           <label className="field">
             New password
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
+            <div className="auth-input-shell">
+              <Lock className="auth-input-icon" size={16} />
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Choose a new password"
+                required
+                minLength={6}
+              />
+            </div>
           </label>
           <label className="field">
             Confirm password
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              minLength={6}
-            />
+            <div className="auth-input-shell">
+              <Lock className="auth-input-icon" size={16} />
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm your new password"
+                required
+                minLength={6}
+              />
+            </div>
           </label>
           {error ? <p className="error">{error}</p> : null}
           <Button type="submit" className="auth-form-button" disabled={busy}>

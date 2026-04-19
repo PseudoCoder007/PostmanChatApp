@@ -9,6 +9,13 @@ const SignupPage = lazy(() => import('./pages/SignupPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 
+function getPageTitle(pathname: string) {
+  if (pathname === '/login') return 'Sign In | PostmanChat';
+  if (pathname === '/signup') return 'Create Account | PostmanChat';
+  if (pathname === '/reset-password') return 'Reset Password | PostmanChat';
+  return 'PostmanChat | Conversations that move work forward';
+}
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -20,6 +27,10 @@ export default function App() {
     }
     navigate({ pathname: redirectPath, search: location.search, hash: location.hash }, { replace: true });
   }, [location.hash, location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    document.title = getPageTitle(location.pathname);
+  }, [location.pathname]);
 
   return (
     <div className="app-shell">

@@ -8,6 +8,7 @@ interface AuthFormProps extends React.HTMLAttributes<HTMLDivElement> {
   logoAlt?: string;
   title: string;
   description?: string;
+  eyebrow?: string;
   primaryAction?: {
     label: string;
     icon?: React.ReactNode;
@@ -34,6 +35,7 @@ const AuthForm = React.forwardRef<HTMLDivElement, AuthFormProps>(
       logoAlt = "Company Logo",
       title,
       description,
+      eyebrow,
       primaryAction,
       secondaryActions,
       skipAction,
@@ -42,14 +44,17 @@ const AuthForm = React.forwardRef<HTMLDivElement, AuthFormProps>(
       ...props
     },
     ref,
-  ) => {
+    ) => {
     return (
       <div className={cn("auth-form-shell", className)} {...props}>
+        <div className="auth-form-glow" aria-hidden="true" />
         <Card ref={ref} className="auth-form-card">
+          <div className="auth-form-card-accent" aria-hidden="true" />
           <CardHeader className="auth-form-header">
             <div className="auth-form-logo-wrap">
               <img src={logoSrc} alt={logoAlt} className="auth-form-logo" />
             </div>
+            {eyebrow ? <span className="auth-form-eyebrow">{eyebrow}</span> : null}
             <CardTitle>{title}</CardTitle>
             {description && <CardDescription>{description}</CardDescription>}
           </CardHeader>
