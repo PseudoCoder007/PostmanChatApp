@@ -4,9 +4,19 @@ PostmanChat is a full-stack realtime messaging platform built with React, Spring
 
 ## Version 2
 
-`v2.0.0` is the current UI release.
+`v2.1.0` is the current release.
 
-Version 2 adds:
+### v2.1.0 — Chat UX & Safety Update
+
+- Two-tab chat layout: DMs and Groups are separated into distinct tabs with room-count badges
+- DM ⋮ settings menu: View Profile modal, Unfriend, and Block directly from a conversation
+- Seen / Sent read receipts: WhatsApp-style ✓ / ✓✓ tick marks on own DM messages
+- Block system: blocked users cannot message each other; they are hidden from People search; unblock available from the People tab
+- Peer profile modal: click "View Profile" in the DM menu to see avatar, level, XP, coins, and online status without leaving the chat
+- Hamburger menu is now mobile-only (hidden at ≥769px)
+- Navbar search now functional — type to filter and jump to any workspace tab
+
+### v2.0.0 — UI Refresh
 
 - Refined login and signup experience with a cleaner, more professional UI
 - Better desktop viewport fit for auth screens without breaking mobile responsiveness
@@ -15,20 +25,24 @@ Version 2 adds:
 
 Version markers in this repo:
 
-- Frontend package: `2.0.0`
-- Backend artifact: `2.0.0-SNAPSHOT`
+- Frontend package: `2.1.0`
+- Backend artifact: `2.1.0-SNAPSHOT`
 
 ## Core Features
 
 - Realtime room chat over STOMP WebSockets
 - Public and private rooms with join requests
-- Friend-gated direct messages
+- Friend-gated direct messages with two-tab (DMs / Groups) layout
+- Seen / Sent read receipts on DM messages (WhatsApp-style ✓ / ✓✓)
+- Block / Unblock users — prevents messaging and hides blocked users from search
+- Peer profile modal — view avatar, level, XP, coins, and online status from a DM
 - Supabase Auth with backend JWT validation
 - Username availability checks and reset-password flow
 - File uploads for images, videos, and documents
 - Supabase Storage with backend fallback handling
 - Presence, notifications, quests, XP, coins, levels, and leaderboard systems
 - Igris AI assistant chat and history
+- Functional navbar search — jump to any workspace tab by name or keyword
 - Theme, sound, onboarding, and feedback flows
 
 ## Tech Stack
@@ -46,12 +60,35 @@ Version markers in this repo:
 ```text
 PostWebAppforMessaging/
 |-- backend/
+|-- docs/
 |-- frontend/
 |-- deploy/
+|-- AGENTS.md
 |-- docker-compose.yml
 |-- Dockerfile
 `-- README.md
 ```
+
+## Navigation
+
+- [AGENTS.md](AGENTS.md): root agent entrypoint that forwards to the docs hub
+- [docs/project-docs/README.md](docs/project-docs/README.md): canonical documentation hub and required read order
+- [docs/project-docs/AGENTS.md](docs/project-docs/AGENTS.md): fast-entry repo map for Claude, Codex, and other agents
+- [docs/project-docs/CLAUDE_DEV_PROTOCOL.md](docs/project-docs/CLAUDE_DEV_PROTOCOL.md): concise planning and implementation rules
+- [docs/project-docs/ARCHITECTURE_MAP.md](docs/project-docs/ARCHITECTURE_MAP.md): deeper subsystem map with routes, API inventory, and ownership notes
+
+## Feature Roadmap Docs
+
+- [docs/new-features/README.md](docs/new-features/README.md): canonical roadmap hub for missing features, differentiators, and phased rollout
+
+For upcoming product additions, start with `docs/project-docs/` to understand the current system, then use `docs/new-features/` for roadmap planning and sequencing.
+
+Agents working in this repo should read the docs in this order before planning or executing:
+
+1. `docs/project-docs/README.md`
+2. `docs/project-docs/AGENTS.md`
+3. `docs/project-docs/CLAUDE_DEV_PROTOCOL.md`
+4. `docs/project-docs/ARCHITECTURE_MAP.md`
 
 ## Quick Start
 
