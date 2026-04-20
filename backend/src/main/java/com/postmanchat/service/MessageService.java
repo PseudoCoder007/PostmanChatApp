@@ -5,6 +5,7 @@ import com.postmanchat.domain.Attachment;
 import com.postmanchat.domain.Message;
 import com.postmanchat.domain.Profile;
 import com.postmanchat.domain.Room;
+import com.postmanchat.domain.RoomType;
 import com.postmanchat.repo.MessageRepository;
 import com.postmanchat.repo.ProfileRepository;
 import com.postmanchat.web.Authz;
@@ -43,6 +44,7 @@ public class MessageService {
     private final NotificationService notificationService;
     private final com.postmanchat.repo.RoomMemberRepository roomMemberRepository;
     private final QuestService questService;
+    private final FriendService friendService;
 
     public MessageService(
             MessageRepository messageRepository,
@@ -54,7 +56,8 @@ public class MessageService {
             AttachmentService attachmentService,
             NotificationService notificationService,
             com.postmanchat.repo.RoomMemberRepository roomMemberRepository,
-            QuestService questService
+            QuestService questService,
+            FriendService friendService
     ) {
         this.messageRepository = messageRepository;
         this.profileRepository = profileRepository;
@@ -66,6 +69,7 @@ public class MessageService {
         this.notificationService = notificationService;
         this.roomMemberRepository = roomMemberRepository;
         this.questService = questService;
+        this.friendService = friendService;
     }
 
     @Transactional(readOnly = true)
@@ -86,6 +90,16 @@ public class MessageService {
     public MessageDto sendMessage(UUID roomId, SendMessageRequest request) {
         UUID userId = Authz.requireUserId();
         roomService.assertMember(roomId, userId);
+        Room roomForBlockCheck = roomService.findRoom(roomId);
+        if (roomForBlockCheck.getType() == RoomType.direct) {
+            UUID peerId = roomMemberRepository.findByIdRoomId(roomId).stream()
+                    .map(m -> m.getId().getUserId())
+                    .filter(id -> !id.equals(userId))
+                    .findFirst().orElseThrow();
+            if (friendService.isBlockedBetween(userId, peerId)) {
+                throw new AccessDeniedException("Cannot send message — one user has blocked the other");
+            }
+        }
         String body = sanitizeContent(request.content(), request.attachmentId());
         UUID replyTo = request.replyTo();
         Attachment attachment = request.attachmentId() != null ? attachmentService.resolveOwnedAttachment(request.attachmentId()) : null;

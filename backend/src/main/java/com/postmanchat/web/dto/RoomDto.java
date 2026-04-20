@@ -16,6 +16,7 @@ public record RoomDto(
         RoomVisibility visibility,
         boolean member,
         String currentUserRole,
-        long memberCount
+        long memberCount,
+        Instant peerLastReadAt
 ) {
 }

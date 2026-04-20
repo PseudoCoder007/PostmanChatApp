@@ -9,6 +9,7 @@ backend/target/
 backend/.m2/
 backend/.env
 backend/backend/uploads/
+backend/uploads/
 
 # Local toolchains
 .tools/

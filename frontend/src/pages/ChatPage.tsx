@@ -11,7 +11,7 @@ import { useTutorial } from '@/hooks/useTutorial';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { LevelUpCelebration } from '@/components/LevelUpCelebration';
-import type { Attachment, FeedbackRequest, FeedbackResponse, FriendRequest, IgrisChatResponse, IgrisChatTurn, IgrisHistoryItem, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomVisibility, TypingEvent, WsMessagePayload } from '@/types/chat';
+import type { Attachment, FeedbackRequest, FeedbackResponse, FriendRequest, IgrisChatResponse, IgrisChatTurn, IgrisHistoryItem, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomReadEvent, RoomVisibility, TypingEvent, WsMessagePayload } from '@/types/chat';
 import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
 import ChatView from '@/components/views/ChatView';
@@ -23,6 +23,7 @@ import LevelsView from '@/components/views/LevelsView';
 import ProfileView from '@/components/views/ProfileView';
 import FeedbackView from '@/components/views/FeedbackView';
 import SettingsView from '@/components/views/SettingsView';
+import ProfileModal from '@/components/ProfileModal';
 
 type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile' | 'feedback' | 'settings';
 type IgrisMessage = { id: string; role: 'user' | 'assistant'; content: string };
@@ -77,6 +78,7 @@ export default function ChatPage() {
   const [soundEnabled, setSoundEnabled] = useState(() => readSoundPreference());
   const [igrisDrawerOpen, setIgrisDrawerOpen] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState<FeedbackRequest>({ category: 'feedback', subject: '', message: '', contactEmail: '' });
+  const [viewingProfile, setViewingProfile] = useState<Profile | null>(null);
   const [focusRefreshTick, setFocusRefreshTick] = useState(() => Math.floor(Date.now() / (10 * 60 * 1000)));
   const [igrisMessages, setIgrisMessages] = useState<IgrisMessage[]>([
     { id: 'intro', role: 'assistant', content: 'Igris online. I can be your funny low-key therapist friend, boredom killer, comeback coach, or chaos planner. Tell me the lore.' },
@@ -103,7 +105,16 @@ export default function ChatPage() {
     refetchOnWindowFocus: false,
     retry: false,
   });
-  const { data: friendships = [] } = useQuery({ queryKey: ['friends'], queryFn: async () => json<FriendRequest[]>(await apiFetch('/api/friends')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
+  const { data: friendships = [] } = useQuery({
+    queryKey: ['friends'],
+    queryFn: async () => json<FriendRequest[]>(await apiFetch('/api/friends')),
+    enabled: !!me,
+    staleTime: 10000,
+    refetchOnWindowFocus: true,
+    refetchInterval: () => document.visibilityState === 'visible' ? 15000 : false,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
   const { data: quests = [] } = useQuery({ queryKey: ['quests'], queryFn: async () => json<Quest[]>(await apiFetch('/api/quests')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: leaderboard = [] } = useQuery({ queryKey: ['leaderboard'], queryFn: async () => json<LeaderboardEntry[]>(await apiFetch('/api/leaderboard?limit=20')), enabled: !!me, staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: notifications = [] } = useQuery({
@@ -124,7 +135,7 @@ export default function ChatPage() {
     refetchOnWindowFocus: false,
     retry: false,
   });
-  const { data: messages = [], refetch: refetchMessages } = useQuery({
+  const { data: messages = [], isLoading: messagesLoading, refetch: refetchMessages } = useQuery({
     queryKey: ['messages', activeRoomId],
     queryFn: async () => json<Message[]>(await apiFetch(`/api/rooms/${activeRoomId}/messages?limit=80`)),
     enabled: !!me && !!activeRoomId,
@@ -176,6 +187,14 @@ export default function ChatPage() {
     if (typingClearTimeoutRef.current) window.clearTimeout(typingClearTimeoutRef.current);
   }, [activeRoomId]);
 
+  // Mark DM room as read when user opens it
+  useEffect(() => {
+    if (!activeRoomId || !me) return;
+    const room = allRooms.find(r => r.id === activeRoomId);
+    if (room?.type !== 'direct') return;
+    void apiFetch(`/api/rooms/${activeRoomId}/read`, { method: 'POST' }).catch(() => {});
+  }, [activeRoomId, me]);
+
   useEffect(() => {
     igrisMessagesRef.current = igrisMessages;
   }, [igrisMessages]);
@@ -214,6 +233,7 @@ export default function ChatPage() {
     : [];
   const incoming = friendships.filter((item) => item.friendshipState === 'incoming');
   const friends = friendships.filter((item) => item.friendshipState === 'accepted');
+  const blocked = friendships.filter((item) => item.friendshipState === 'blocked_by_me');
   const onlineFriends = friends.filter((item) => item.profile.active);
   const unread = notifications.filter((item) => !item.read);
   const activeQuests = quests.filter((quest) => quest.status === 'assigned');
@@ -294,6 +314,13 @@ export default function ChatPage() {
       typingClearTimeoutRef.current = window.setTimeout(() => setRoomTyping(null), 1800);
       return;
     }
+    if (payload.type === 'ROOM_READ' && payload.roomRead) {
+      const { roomId, readAt } = payload.roomRead as RoomReadEvent;
+      qc.setQueryData<Room[]>(['rooms'], (old) =>
+        old ? old.map(r => r.id === roomId ? { ...r, peerLastReadAt: readAt } : r) : old
+      );
+      return;
+    }
     if (!payload.message || payload.message.roomId !== activeRoomId) return;
     if (roomTyping && payload.message.senderId === roomTyping.userId) {
       setRoomTyping(null);
@@ -331,9 +358,19 @@ export default function ChatPage() {
     onSuccess: async () => { playUiTone('success'); toast.success('New mission generated'); await refreshCore(); setActiveView('quests'); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
-  const challengeFriend = useMutation({
-    mutationFn: async ({ targetUserId }: { targetUserId: string }) => json<Quest>(await apiFetch(`/api/quests/friends/${targetUserId}/random`, { method: 'POST' })),
-    onSuccess: async () => { playUiTone('success'); toast.success('Friend quest sent'); await refreshCore(); setActiveView('quests'); },
+  const unfriend = useMutation({
+    mutationFn: async ({ otherUserId }: { otherUserId: string }) => apiFetch(`/api/friends/${otherUserId}`, { method: 'DELETE' }),
+    onSuccess: async () => { toast.success('Friend removed'); await refreshCore(); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const blockUser = useMutation({
+    mutationFn: async ({ targetUserId }: { targetUserId: string }) => apiFetch(`/api/friends/${targetUserId}/block`, { method: 'POST' }),
+    onSuccess: async () => { toast.success('User blocked'); await refreshCore(); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const unblockUser = useMutation({
+    mutationFn: async ({ targetUserId }: { targetUserId: string }) => apiFetch(`/api/friends/${targetUserId}/block`, { method: 'DELETE' }),
+    onSuccess: async () => { toast.success('User unblocked'); await refreshCore(); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const createGroupRoom = useMutation({
@@ -590,6 +627,7 @@ export default function ChatPage() {
           onSettingsClick={() => setActiveView('settings')}
           onAvatarClick={() => setActiveView('profile')}
           onMenuClick={() => setSidebarOpen(true)}
+          onNavigate={setActiveView}
         />
 
         <main className={`pm-content${activeView === 'chat' ? ' pm-content--chat' : ''}`}>
@@ -631,6 +669,14 @@ export default function ChatPage() {
               initials={initials}
               getRoomTitle={getRoomTitle}
               fileBadge={fileBadge}
+              messagesLoading={messagesLoading}
+              onUnfriend={(userId) => unfriend.mutate({ otherUserId: userId })}
+              onViewProfile={(userId) => {
+                const peer = activeRoom?.directPeer?.id === userId ? activeRoom.directPeer : null;
+                if (peer) setViewingProfile(peer);
+              }}
+              onBlock={(userId) => blockUser.mutate({ targetUserId: userId })}
+              onUnblock={(userId) => unblockUser.mutate({ targetUserId: userId })}
             />
           )}
 
@@ -639,13 +685,16 @@ export default function ChatPage() {
               me={me}
               friends={friends}
               incoming={incoming}
+              blocked={blocked}
               people={people}
               peopleSearch={peopleSearch}
               setPeopleSearch={setPeopleSearch}
               onAddFriend={(userId) => addFriend.mutate({ targetUserId: userId })}
               onAcceptFriend={(userId) => acceptFriend.mutate({ otherUserId: userId })}
               onMessage={(userId) => createDirectRoom.mutate({ targetUserId: userId })}
-              onChallenge={(userId) => challengeFriend.mutate({ targetUserId: userId })}
+              onUnfriend={(userId) => unfriend.mutate({ otherUserId: userId })}
+              onBlock={(userId) => blockUser.mutate({ targetUserId: userId })}
+              onUnblock={(userId) => unblockUser.mutate({ targetUserId: userId })}
               addPending={addFriend.isPending}
               acceptPending={acceptFriend.isPending}
               messagePending={createDirectRoom.isPending}
@@ -741,7 +790,7 @@ export default function ChatPage() {
       </div>
 
       {/* ── Igris FAB + Drawer ───────────────────────────── */}
-      <div className="pm-igris-fab-wrap" style={{ display: activeView === 'chat' ? 'none' : undefined }}>
+      <div className={`pm-igris-fab-wrap${igrisDrawerOpen ? ' pm-igris-fab-wrap--drawer-open' : ''}`} style={{ display: activeView === 'chat' ? 'none' : undefined }}>
         <button
           className="pm-igris-fab"
           onClick={me?.canUseIgris ? (igrisDrawerOpen ? closeIgrisDrawer : openIgrisDrawer) : () => setActiveView('igris')}
@@ -794,6 +843,13 @@ export default function ChatPage() {
       </aside>
 
       <TutorialOverlay />
+      {viewingProfile && (
+        <ProfileModal
+          profile={viewingProfile}
+          onClose={() => setViewingProfile(null)}
+          initials={initials}
+        />
+      )}
       {levelUpCelebration && (
         <LevelUpCelebration
           oldLevel={levelUpCelebration.oldLevel}

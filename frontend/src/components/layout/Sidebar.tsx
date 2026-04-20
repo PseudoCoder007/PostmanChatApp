@@ -66,7 +66,7 @@ export default function Sidebar({
 
       {/* User Identity */}
       {me && (
-        <div className="pm-sidebar__user">
+        <button className="pm-sidebar__user" onClick={() => handleNavigate('profile')} title="View your profile">
           <div className="pm-avatar pm-avatar--md">
             {me.avatarUrl
               ? <img src={me.avatarUrl} alt={me.displayName} />
@@ -78,7 +78,7 @@ export default function Sidebar({
               @{me.username} · Lv.{me.level} · {me.title}
             </div>
           </div>
-        </div>
+        </button>
       )}
 
       {/* Navigation */}

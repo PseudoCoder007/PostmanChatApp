@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import { Send, Cpu, Lock } from 'lucide-react';
+import { useRef, useEffect, useState } from 'react';
+import { Send, Cpu, X } from 'lucide-react';
 import type { Profile } from '@/types/chat';
 
 type IgrisMessage = { id: string; role: 'user' | 'assistant'; content: string };
@@ -29,6 +29,7 @@ export default function IgrisView({
   const bottomRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const isLocked = !me?.canUseIgris;
+  const [showChips, setShowChips] = useState(true);
 
   useEffect(() => {
     const stream = streamRef.current;
@@ -76,13 +77,18 @@ export default function IgrisView({
           ) : (
             <>
               {/* Quick chips */}
-              <div className="pm-igris-chips">
-                {QUICK_CHIPS.map(chip => (
-                  <button key={chip} className="pm-igris-chip" onClick={() => onSend(chip)} disabled={isPending}>
-                    {chip}
+              {showChips && (
+                <div className="pm-igris-chips">
+                  <button className="pm-igris-chips__dismiss" onClick={() => setShowChips(false)} title="Hide suggestions">
+                    <X size={13} />
                   </button>
-                ))}
-              </div>
+                  {QUICK_CHIPS.map(chip => (
+                    <button key={chip} className="pm-igris-chip" onClick={() => onSend(chip)} disabled={isPending}>
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Message stream */}
               <div className="pm-igris-chat__stream" ref={streamRef}>

@@ -36,7 +36,7 @@ public final class DtoMapper {
         );
     }
 
-    public static RoomDto toRoomDto(Room r, ProfileDto directPeer, boolean member, String currentUserRole, long memberCount) {
+    public static RoomDto toRoomDto(Room r, ProfileDto directPeer, boolean member, String currentUserRole, long memberCount, java.time.Instant peerLastReadAt) {
         return new RoomDto(
                 r.getId(),
                 r.getName(),
@@ -47,7 +47,8 @@ public final class DtoMapper {
                 r.getVisibility(),
                 member,
                 currentUserRole,
-                memberCount
+                memberCount,
+                peerLastReadAt
         );
     }
 

@@ -9,7 +9,7 @@ export interface Profile {
   createdAt: string;
   lastActiveAt: string;
   active: boolean;
-  friendshipState: 'none' | 'incoming' | 'outgoing' | 'accepted' | 'self' | null;
+  friendshipState: 'none' | 'incoming' | 'outgoing' | 'accepted' | 'self' | 'blocked_by_me' | 'blocked_by_them' | null;
   xp: number;
   coins: number;
   level: number;
@@ -30,6 +30,7 @@ export interface Room {
   member: boolean;
   currentUserRole: string | null;
   memberCount: number;
+  peerLastReadAt: string | null;
 }
 
 export interface Message {
@@ -99,10 +100,17 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+export interface RoomReadEvent {
+  roomId: string;
+  readByUserId: string;
+  readAt: string;
+}
+
 export interface WsMessagePayload {
-  type: 'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED' | 'TYPING';
+  type: 'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED' | 'TYPING' | 'ROOM_READ';
   message: Message | null;
   typing?: TypingEvent | null;
+  roomRead?: RoomReadEvent | null;
 }
 
 export interface TypingEvent {

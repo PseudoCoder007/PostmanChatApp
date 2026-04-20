@@ -78,6 +78,10 @@ public class ProfileService {
         int cappedLimit = Math.min(Math.max(limit, 1), 20);
         return profileRepository.searchByDisplayName(normalized).stream()
                 .filter(profile -> !profile.getId().equals(currentUserId))
+                .filter(profile -> {
+                    String state = friendService.friendshipState(currentUserId, profile.getId());
+                    return !state.equals("blocked_by_me") && !state.equals("blocked_by_them");
+                })
                 .limit(cappedLimit)
                 .map(profile -> DtoMapper.toProfileDto(profile, friendService.friendshipState(currentUserId, profile.getId())))
                 .toList();

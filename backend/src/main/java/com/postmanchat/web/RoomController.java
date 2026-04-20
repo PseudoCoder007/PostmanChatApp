@@ -9,6 +9,7 @@ import com.postmanchat.web.dto.RoomDto;
 import com.postmanchat.web.dto.SendMessageRequest;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -71,6 +72,12 @@ public class RoomController {
     @PostMapping("/{roomId}/members")
     public RoomDto addRoomMember(@PathVariable UUID roomId, @RequestParam UUID targetUserId) {
         return roomService.addMember(roomId, targetUserId);
+    }
+
+    @PostMapping("/{roomId}/read")
+    public ResponseEntity<Void> markRoomRead(@PathVariable UUID roomId) {
+        roomService.markRoomRead(roomId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{roomId}/messages")

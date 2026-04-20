@@ -16,13 +16,18 @@ import com.postmanchat.web.dto.CreateRoomRequest;
 import com.postmanchat.web.dto.ProfileDto;
 import com.postmanchat.web.dto.RoomJoinRequestDto;
 import com.postmanchat.web.dto.RoomDto;
+import com.postmanchat.web.dto.RoomReadEventDto;
+import com.postmanchat.web.dto.WsMessagePayload;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -36,6 +41,7 @@ public class RoomService {
     private final FriendService friendService;
     private final ProgressionService progressionService;
     private final QuestService questService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public RoomService(
             RoomRepository roomRepository,
@@ -45,7 +51,8 @@ public class RoomService {
             ProfileService profileService,
             FriendService friendService,
             ProgressionService progressionService,
-            QuestService questService
+            QuestService questService,
+            SimpMessagingTemplate messagingTemplate
     ) {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
@@ -55,6 +62,7 @@ public class RoomService {
         this.friendService = friendService;
         this.progressionService = progressionService;
         this.questService = questService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -249,24 +257,45 @@ public class RoomService {
         return toRoomDto(room, userId);
     }
 
+    @Transactional
+    public void markRoomRead(UUID roomId) {
+        UUID userId = Authz.requireUserId();
+        assertMember(roomId, userId);
+        RoomMember member = roomMemberRepository.findByIdRoomIdAndIdUserId(roomId, userId)
+                .orElseThrow(() -> new AccessDeniedException("Not a member"));
+        member.setLastReadAt(Instant.now());
+        roomMemberRepository.save(member);
+        Room room = findRoom(roomId);
+        if (room.getType() == RoomType.direct) {
+            messagingTemplate.convertAndSend(
+                    "/topic/rooms." + roomId,
+                    new WsMessagePayload("ROOM_READ",
+                            new RoomReadEventDto(roomId, userId, member.getLastReadAt()))
+            );
+        }
+    }
+
     private RoomDto toRoomDto(Room room, UUID currentUserId) {
         ProfileDto directPeer = null;
+        Instant peerLastReadAt = null;
         boolean member = roomMemberRepository.existsByIdRoomIdAndIdUserId(room.getId(), currentUserId);
         String currentUserRole = roomMemberRepository.findByIdRoomIdAndIdUserId(room.getId(), currentUserId)
                 .map(RoomMember::getRole)
                 .orElse(null);
         long memberCount = roomMemberRepository.countByIdRoomId(room.getId());
         if (room.getType() == RoomType.direct) {
-            directPeer = roomMemberRepository.findByIdRoomId(room.getId()).stream()
-                    .map(RoomMember::getId)
-                    .map(RoomMemberId::getUserId)
-                    .filter(memberId -> !memberId.equals(currentUserId))
-                    .findFirst()
-                    .flatMap(profileRepository::findById)
-                    .map(profile -> DtoMapper.toProfileDto(profile, "accepted"))
-                    .orElse(null);
+            Optional<RoomMember> peerOpt = roomMemberRepository.findByIdRoomId(room.getId()).stream()
+                    .filter(m -> !m.getId().getUserId().equals(currentUserId))
+                    .findFirst();
+            if (peerOpt.isPresent()) {
+                RoomMember peer = peerOpt.get();
+                peerLastReadAt = peer.getLastReadAt();
+                directPeer = profileRepository.findById(peer.getId().getUserId())
+                        .map(p -> DtoMapper.toProfileDto(p, "accepted"))
+                        .orElse(null);
+            }
         }
-        return DtoMapper.toRoomDto(room, directPeer, member, currentUserRole, memberCount);
+        return DtoMapper.toRoomDto(room, directPeer, member, currentUserRole, memberCount, peerLastReadAt);
     }
 
     private static boolean matchesSearch(RoomDto room, String normalized) {

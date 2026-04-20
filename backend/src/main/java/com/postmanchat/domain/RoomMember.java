@@ -20,6 +20,9 @@ public class RoomMember {
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt = Instant.now();
 
+    @Column(name = "last_read_at")
+    private Instant lastReadAt;
+
     protected RoomMember() {
     }
 
@@ -39,5 +42,13 @@ public class RoomMember {
 
     public Instant getJoinedAt() {
         return joinedAt;
+    }
+
+    public Instant getLastReadAt() {
+        return lastReadAt;
+    }
+
+    public void setLastReadAt(Instant lastReadAt) {
+        this.lastReadAt = lastReadAt;
     }
 }

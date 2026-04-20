@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { UserPlus, MessageCircle, Check, Search } from 'lucide-react';
+import { UserPlus, MessageCircle, Check, Search, MoreVertical, UserMinus } from 'lucide-react';
 import type { Profile, FriendRequest } from '@/types/chat';
 import { Footer } from '@/components/ui/footer-section';
 
@@ -7,13 +7,16 @@ interface PeopleViewProps {
   me: Profile | undefined;
   friends: FriendRequest[];
   incoming: FriendRequest[];
+  blocked: FriendRequest[];
   people: Profile[];
   peopleSearch: string;
   setPeopleSearch: (v: string) => void;
   onAddFriend: (userId: string) => void;
   onAcceptFriend: (userId: string) => void;
   onMessage: (userId: string) => void;
-  onChallenge: (userId: string) => void;
+  onUnfriend: (userId: string) => void;
+  onBlock: (userId: string) => void;
+  onUnblock: (userId: string) => void;
   addPending: boolean;
   acceptPending: boolean;
   messagePending: boolean;
@@ -21,10 +24,16 @@ interface PeopleViewProps {
 }
 
 export default function PeopleView({
-  me, friends, incoming, people, peopleSearch, setPeopleSearch,
-  onAddFriend, onAcceptFriend, onMessage, onChallenge,
+  me, friends, incoming, blocked, people, peopleSearch, setPeopleSearch,
+  onAddFriend, onAcceptFriend, onMessage, onUnfriend, onBlock, onUnblock,
   addPending, acceptPending, messagePending, initials,
 }: PeopleViewProps) {
+  const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
+
+  function toggleMenu(id: string) {
+    setOpenMenuFor(prev => prev === id ? null : id);
+  }
+
   return (
     <div>
       <div className="pm-view-header">
@@ -59,16 +68,38 @@ export default function PeopleView({
                 >
                   <MessageCircle size={13} />
                 </button>
-                {me?.canChallengeFriends && (
+                <div style={{ position: 'relative' }}>
                   <button
-                    className="pm-btn pm-btn--sm pm-btn--primary"
-                    onClick={() => onChallenge(f.profile.id)}
-                    title="Send quest"
-                    style={{ fontSize: 11 }}
+                    className="pm-btn pm-btn--sm pm-btn--ghost"
+                    title="More options"
+                    onClick={() => toggleMenu(f.profile.id)}
+                    onBlur={() => setTimeout(() => setOpenMenuFor(null), 150)}
                   >
-                    ⚔️
+                    <MoreVertical size={13} />
                   </button>
-                )}
+                  {openMenuFor === f.profile.id && (
+                    <div className="pm-friend-menu">
+                      <button
+                        className="pm-friend-menu__item"
+                        onMouseDown={() => { onMessage(f.profile.id); setOpenMenuFor(null); }}
+                      >
+                        <MessageCircle size={13} /> Message
+                      </button>
+                      <button
+                        className="pm-friend-menu__item pm-friend-menu__item--danger"
+                        onMouseDown={() => { onUnfriend(f.profile.id); setOpenMenuFor(null); }}
+                      >
+                        <UserMinus size={13} /> Unfriend
+                      </button>
+                      <button
+                        className="pm-friend-menu__item pm-friend-menu__item--danger"
+                        onMouseDown={() => { onBlock(f.profile.id); setOpenMenuFor(null); }}
+                      >
+                        🔇 Block
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -76,24 +107,30 @@ export default function PeopleView({
 
         {/* Right: Requests + Search */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {incoming.length > 0 && (
-            <div className="pm-card">
-              <div className="pm-card__title">Requests ({incoming.length})</div>
-              {incoming.map(f => (
-                <div key={f.profile.id} className="pm-friend-item">
-                  <div className="pm-avatar pm-avatar--sm">{initials(f.profile.displayName)}</div>
-                  <span className="pm-friend-item__name">{f.profile.displayName}</span>
-                  <button
-                    className="pm-btn pm-btn--sm pm-btn--primary"
-                    onClick={() => onAcceptFriend(f.profile.id)}
-                    disabled={acceptPending}
-                  >
-                    <Check size={13} /> Accept
-                  </button>
+          <div className="pm-card">
+            <div className="pm-card__title">Requests ({incoming.length})</div>
+            {incoming.length === 0 ? (
+              <div className="pm-empty">
+                <span className="pm-empty__icon">📭</span>
+                <div className="pm-empty__sub">No pending requests</div>
+              </div>
+            ) : incoming.map(f => (
+              <div key={f.profile.id} className="pm-friend-item">
+                <div className="pm-avatar pm-avatar--sm">{initials(f.profile.displayName)}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{f.profile.displayName}</div>
+                  <div style={{ fontSize: 11, color: 'var(--pm-text-muted)' }}>@{f.profile.username}</div>
                 </div>
-              ))}
-            </div>
-          )}
+                <button
+                  className="pm-btn pm-btn--sm pm-btn--primary"
+                  onClick={() => onAcceptFriend(f.profile.id)}
+                  disabled={acceptPending}
+                >
+                  <Check size={13} /> Accept
+                </button>
+              </div>
+            ))}
+          </div>
 
           <div className="pm-card">
             <div className="pm-card__title">Find Allies 🔍</div>
@@ -140,6 +177,26 @@ export default function PeopleView({
           </div>
         </div>
       </div>
+
+      {blocked.length > 0 && (
+        <div style={{ maxWidth: 560, margin: '16px auto 0', padding: '0 16px' }}>
+          <div className="pm-card">
+            <div className="pm-card__title">Blocked Users ({blocked.length})</div>
+            {blocked.map(f => (
+              <div key={f.profile.id} className="pm-friend-item">
+                <div className="pm-avatar pm-avatar--sm" style={{ opacity: 0.5 }}>{initials(f.profile.displayName)}</div>
+                <span className="pm-friend-item__name" style={{ opacity: 0.6 }}>{f.profile.displayName}</span>
+                <button
+                  className="pm-btn pm-btn--sm pm-btn--ghost"
+                  onClick={() => onUnblock(f.profile.id)}
+                >
+                  Unblock
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>

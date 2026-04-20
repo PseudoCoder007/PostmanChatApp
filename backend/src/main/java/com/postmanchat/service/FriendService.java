@@ -81,6 +81,57 @@ public class FriendService {
         return toDto(saved, userId);
     }
 
+    @Transactional
+    public void removeFriend(UUID otherUserId) {
+        UUID userId = Authz.requireUserId();
+        FriendshipId id = pair(userId, otherUserId);
+        Friendship friendship = friendshipRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Friendship not found"));
+        if (friendship.getStatus() != FriendshipStatus.accepted) {
+            throw new IllegalArgumentException("You are not friends with this user");
+        }
+        friendshipRepository.delete(friendship);
+        touchLastActive(userId);
+    }
+
+    @Transactional
+    public void blockUser(UUID targetUserId) {
+        UUID userId = Authz.requireUserId();
+        if (userId.equals(targetUserId)) throw new IllegalArgumentException("Cannot block yourself");
+        FriendshipId id = pair(userId, targetUserId);
+        Friendship friendship = friendshipRepository.findById(id).orElse(null);
+        if (friendship == null) {
+            friendship = new Friendship(id, userId, FriendshipStatus.blocked);
+        } else {
+            friendship.setStatus(FriendshipStatus.blocked);
+            friendship.setRequestedBy(userId);
+            friendship.setRespondedAt(Instant.now());
+        }
+        friendshipRepository.save(friendship);
+        touchLastActive(userId);
+    }
+
+    @Transactional
+    public void unblockUser(UUID targetUserId) {
+        UUID userId = Authz.requireUserId();
+        FriendshipId id = pair(userId, targetUserId);
+        Friendship friendship = friendshipRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("No block record found"));
+        if (friendship.getStatus() != FriendshipStatus.blocked || !friendship.getRequestedBy().equals(userId)) {
+            throw new IllegalArgumentException("You have not blocked this user");
+        }
+        friendshipRepository.delete(friendship);
+        touchLastActive(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isBlockedBetween(UUID userA, UUID userB) {
+        FriendshipId id = pair(userA, userB);
+        return friendshipRepository.findById(id)
+                .map(f -> f.getStatus() == FriendshipStatus.blocked)
+                .orElse(false);
+    }
+
     @Transactional(readOnly = true)
     public boolean areFriends(UUID firstUserId, UUID secondUserId) {
         FriendshipId id = pair(firstUserId, secondUserId);
@@ -95,6 +146,10 @@ public class FriendService {
         Friendship friendship = friendshipRepository.findById(pair(currentUserId, otherUserId)).orElse(null);
         if (friendship == null) {
             return "none";
+        }
+        if (friendship.getStatus() == FriendshipStatus.blocked) {
+            if (friendship.getRequestedBy().equals(currentUserId)) return "blocked_by_me";
+            return "blocked_by_them";
         }
         if (friendship.getStatus() == FriendshipStatus.accepted) {
             return "accepted";
