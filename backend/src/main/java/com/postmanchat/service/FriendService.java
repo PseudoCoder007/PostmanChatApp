@@ -8,12 +8,16 @@ import com.postmanchat.repo.FriendshipRepository;
 import com.postmanchat.repo.ProfileRepository;
 import com.postmanchat.web.Authz;
 import com.postmanchat.web.dto.FriendRequestDto;
+import com.postmanchat.web.dto.MutualFriendsDto;
 import com.postmanchat.web.dto.ProfileDto;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -122,6 +126,25 @@ public class FriendService {
         }
         friendshipRepository.delete(friendship);
         touchLastActive(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public MutualFriendsDto getMutualFriends(UUID targetUserId) {
+        UUID currentUserId = Authz.requireUserId();
+        Set<UUID> myFriends = new HashSet<>(friendshipRepository.findAcceptedFriendIds(currentUserId, FriendshipStatus.accepted));
+        List<UUID> theirFriends = friendshipRepository.findAcceptedFriendIds(targetUserId, FriendshipStatus.accepted);
+        List<UUID> mutualIds = theirFriends.stream()
+                .filter(myFriends::contains)
+                .limit(100)
+                .toList();
+        List<ProfileDto> samples = mutualIds.stream()
+                .limit(5)
+                .map(profileRepository::findById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .map(p -> DtoMapper.toProfileDto(p, friendshipState(currentUserId, p.getId())))
+                .toList();
+        return new MutualFriendsDto(mutualIds.size(), samples);
     }
 
     @Transactional(readOnly = true)

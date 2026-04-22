@@ -58,7 +58,14 @@ export default function PeopleView({
             <div key={f.profile.id} className="pm-friend-item">
               <div className="pm-avatar pm-avatar--sm">{initials(f.profile.displayName)}</div>
               <div className={`pm-friend-item__status pm-friend-item__status--${f.profile.active ? 'online' : 'offline'}`} />
-              <span className="pm-friend-item__name">{f.profile.displayName}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="pm-friend-item__name">{f.profile.displayName}</div>
+                {(f.profile.statusEmoji || f.profile.statusText) && (
+                  <div className="pm-friend-item__custom-status">
+                    {f.profile.statusEmoji} {f.profile.statusText}
+                  </div>
+                )}
+              </div>
               <div className="pm-friend-item__actions">
                 <button
                   className="pm-btn pm-btn--sm pm-btn--ghost"
@@ -147,9 +154,12 @@ export default function PeopleView({
             {people.filter(p => p.id !== me?.id).map(p => (
               <div key={p.id} className="pm-friend-item">
                 <div className="pm-avatar pm-avatar--sm">{initials(p.displayName)}</div>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{p.displayName}</div>
                   <div style={{ fontSize: 11, color: 'var(--pm-text-muted)' }}>@{p.username} · Lv.{p.level}</div>
+                  {(p.statusEmoji || p.statusText) && (
+                    <div className="pm-friend-item__custom-status">{p.statusEmoji} {p.statusText}</div>
+                  )}
                 </div>
                 {p.friendshipState === 'accepted' && (
                   <button className="pm-btn pm-btn--sm pm-btn--ghost" onClick={() => onMessage(p.id)} disabled={messagePending}>

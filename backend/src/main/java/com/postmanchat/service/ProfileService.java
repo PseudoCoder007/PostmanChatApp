@@ -6,6 +6,7 @@ import com.postmanchat.repo.ProfileRepository;
 import com.postmanchat.web.Authz;
 import com.postmanchat.web.dto.ProfileDto;
 import com.postmanchat.web.dto.UpdateProfileRequest;
+import com.postmanchat.web.dto.UpdateStatusRequest;
 import com.postmanchat.web.dto.UsernameAvailabilityDto;
 import com.postmanchat.web.dto.LoginIdentifierResponse;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -132,6 +133,18 @@ public class ProfileService {
         String avatarUrl = attachmentService.storePublicFile(file, "avatar");
         profile.setAvatarUrl(avatarUrl);
         profile.setLastActiveAt(Instant.now());
+        return DtoMapper.toProfileDto(profileRepository.save(profile), null);
+    }
+
+    @Transactional
+    public ProfileDto updateCurrentStatus(UpdateStatusRequest request) {
+        UUID userId = Authz.requireUserId();
+        Profile profile = profileRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found"));
+        String text = request.statusText() == null ? null : request.statusText().trim();
+        String emoji = request.statusEmoji() == null ? null : request.statusEmoji().trim();
+        profile.setStatusText(text == null || text.isBlank() ? null : text);
+        profile.setStatusEmoji(emoji == null || emoji.isBlank() ? null : emoji);
         return DtoMapper.toProfileDto(profileRepository.save(profile), null);
     }
 

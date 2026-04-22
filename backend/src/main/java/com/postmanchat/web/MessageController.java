@@ -1,6 +1,7 @@
 package com.postmanchat.web;
 
 import com.postmanchat.service.MessageService;
+import com.postmanchat.web.dto.ForwardMessageRequest;
 import com.postmanchat.web.dto.MessageDto;
 import com.postmanchat.web.dto.PatchMessageRequest;
 import jakarta.validation.Valid;
@@ -42,5 +43,11 @@ public class MessageController {
     public MessageDto toggleReaction(@PathVariable UUID id, @RequestBody Map<String, String> body) {
         String emoji = body.get("emoji");
         return messageService.toggleReaction(id, emoji);
+    }
+
+    @PostMapping("/{id}/forward")
+    @ResponseStatus(HttpStatus.CREATED)
+    public MessageDto forward(@PathVariable UUID id, @Valid @RequestBody ForwardMessageRequest request) {
+        return messageService.forwardMessage(id, request.targetRoomId());
     }
 }

@@ -18,6 +18,8 @@ public record ProfileDto(
         String title,
         boolean profilePhotoUnlocked,
         boolean canChallengeFriends,
-        boolean canUseIgris
+        boolean canUseIgris,
+        String statusText,
+        String statusEmoji
 ) {
 }

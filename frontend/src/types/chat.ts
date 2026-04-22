@@ -17,6 +17,8 @@ export interface Profile {
   profilePhotoUnlocked: boolean;
   canChallengeFriends: boolean;
   canUseIgris: boolean;
+  statusText?: string | null;
+  statusEmoji?: string | null;
 }
 
 export interface Room {
@@ -32,6 +34,7 @@ export interface Room {
   memberCount: number;
   peerLastReadAt: string | null;
   muted: boolean;
+  lastMessageAt?: string | null;
 }
 
 export interface ReactionCount {
@@ -52,6 +55,7 @@ export interface Message {
   editedAt: string | null;
   replyTo: string | null;
   reactions: ReactionCount[];
+  forwardedFromId?: string | null;
 }
 
 export interface FriendRequest {
@@ -152,6 +156,11 @@ export interface PinnedMessage {
   senderDisplayName: string;
   pinnedBy: string;
   pinnedAt: string;
+}
+
+export interface MutualFriends {
+  count: number;
+  samples: Profile[];
 }
 
 export interface FeedbackRequest {

@@ -35,11 +35,13 @@ public final class DtoMapper {
                 p.getTitle(),
                 p.isProfilePhotoUnlocked(),
                 p.isFriendQuestsUnlocked(),
-                p.isIgrisUnlocked()
+                p.isIgrisUnlocked(),
+                p.getStatusText(),
+                p.getStatusEmoji()
         );
     }
 
-    public static RoomDto toRoomDto(Room r, ProfileDto directPeer, boolean member, String currentUserRole, long memberCount, java.time.Instant peerLastReadAt, boolean muted) {
+    public static RoomDto toRoomDto(Room r, ProfileDto directPeer, boolean member, String currentUserRole, long memberCount, java.time.Instant peerLastReadAt, boolean muted, java.time.Instant lastMessageAt) {
         return new RoomDto(
                 r.getId(),
                 r.getName(),
@@ -52,7 +54,8 @@ public final class DtoMapper {
                 currentUserRole,
                 memberCount,
                 peerLastReadAt,
-                muted
+                muted,
+                lastMessageAt
         );
     }
 
@@ -68,7 +71,8 @@ public final class DtoMapper {
                 m.getCreatedAt(),
                 m.getEditedAt(),
                 m.getReplyTo(),
-                reactions == null ? List.of() : reactions
+                reactions == null ? List.of() : reactions,
+                m.getForwardedFromId()
         );
     }
 }

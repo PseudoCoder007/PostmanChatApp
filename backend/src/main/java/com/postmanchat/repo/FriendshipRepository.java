@@ -30,4 +30,12 @@ public interface FriendshipRepository extends JpaRepository<Friendship, Friendsh
             @Param("userHighId") UUID userHighId,
             @Param("status") FriendshipStatus status
     );
+
+    @Query("""
+            SELECT CASE WHEN f.id.userLowId = :userId THEN f.id.userHighId ELSE f.id.userLowId END
+            FROM Friendship f
+            WHERE (f.id.userLowId = :userId OR f.id.userHighId = :userId)
+              AND f.status = :status
+            """)
+    List<UUID> findAcceptedFriendIds(@Param("userId") UUID userId, @Param("status") FriendshipStatus status);
 }

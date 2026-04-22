@@ -54,6 +54,12 @@ public class Profile {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt = Instant.now();
 
+    @Column(name = "status_text", length = 80)
+    private String statusText;
+
+    @Column(name = "status_emoji", length = 8)
+    private String statusEmoji;
+
     protected Profile() {
     }
 
@@ -168,5 +174,21 @@ public class Profile {
 
     public void setIgrisUnlocked(boolean igrisUnlocked) {
         this.igrisUnlocked = igrisUnlocked;
+    }
+
+    public String getStatusText() {
+        return statusText;
+    }
+
+    public void setStatusText(String statusText) {
+        this.statusText = statusText;
+    }
+
+    public String getStatusEmoji() {
+        return statusEmoji;
+    }
+
+    public void setStatusEmoji(String statusEmoji) {
+        this.statusEmoji = statusEmoji;
     }
 }

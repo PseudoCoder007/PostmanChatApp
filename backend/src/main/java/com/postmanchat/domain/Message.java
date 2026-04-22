@@ -33,6 +33,9 @@ public class Message {
     @Column(name = "reply_to")
     private UUID replyTo;
 
+    @Column(name = "forwarded_from_id")
+    private UUID forwardedFromId;
+
     protected Message() {
     }
 
@@ -82,5 +85,13 @@ public class Message {
 
     public void setReplyTo(UUID replyTo) {
         this.replyTo = replyTo;
+    }
+
+    public UUID getForwardedFromId() {
+        return forwardedFromId;
+    }
+
+    public void setForwardedFromId(UUID forwardedFromId) {
+        this.forwardedFromId = forwardedFromId;
     }
 }

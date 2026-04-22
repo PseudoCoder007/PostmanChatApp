@@ -3,6 +3,7 @@ package com.postmanchat.web;
 import com.postmanchat.service.ProfileService;
 import com.postmanchat.web.dto.ProfileDto;
 import com.postmanchat.web.dto.UpdateProfileRequest;
+import com.postmanchat.web.dto.UpdateStatusRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -41,5 +42,10 @@ public class MeController {
     @PostMapping("/avatar")
     public ProfileDto uploadAvatar(@RequestParam("file") MultipartFile file) {
         return profileService.uploadCurrentAvatar(file);
+    }
+
+    @PatchMapping("/status")
+    public ProfileDto updateStatus(@Valid @RequestBody UpdateStatusRequest request) {
+        return profileService.updateCurrentStatus(request);
     }
 }

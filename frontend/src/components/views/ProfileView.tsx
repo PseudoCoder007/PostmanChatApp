@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { Camera, Save, Zap, Coins, Users, CheckCircle, Lock } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Camera, Save, Zap, Coins, Users, CheckCircle } from 'lucide-react';
 import type { Profile } from '@/types/chat';
 import { Footer } from '@/components/ui/footer-section';
 
@@ -11,11 +11,15 @@ interface ProfileViewProps {
   setProfileImageFile: (f: File | null) => void;
   onSave: () => void;
   savePending: boolean;
+  onSaveStatus: (statusText: string, statusEmoji: string) => void;
+  statusPending: boolean;
   friendsCount: number;
   completedQuestCount: number;
   xpProgress: { mainProgress: number };
   initials: (v: string) => string;
 }
+
+const STATUS_EMOJIS = ['🎯', '🔥', '💤', '🎮', '📚', '🎵', '✈️', '🏋️', '🍕', '😴', '💻', '🤝'];
 
 const UNLOCKS = [
   { key: 'profilePhoto', icon: '📸', name: 'Profile Photo', price: 5, field: 'profilePhotoUnlocked' as keyof Profile },
@@ -26,9 +30,11 @@ const UNLOCKS = [
 
 export default function ProfileView({
   me, profileForm, setProfileForm, profileImageFile, setProfileImageFile,
-  onSave, savePending, friendsCount, completedQuestCount, xpProgress, initials,
+  onSave, savePending, onSaveStatus, statusPending, friendsCount, completedQuestCount, xpProgress, initials,
 }: ProfileViewProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [statusText, setStatusText] = useState(me?.statusText ?? '');
+  const [statusEmoji, setStatusEmoji] = useState(me?.statusEmoji ?? '');
   const avatarPreview = profileImageFile ? URL.createObjectURL(profileImageFile) : (profileForm.avatarUrl || null);
 
   return (
@@ -119,6 +125,48 @@ export default function ProfileView({
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Custom status */}
+      <div style={{ marginBottom: 20 }} className="pm-card">
+        <div className="pm-card__title">Your Status</div>
+        <div className="pm-status-emoji-grid">
+          {STATUS_EMOJIS.map(e => (
+            <button
+              key={e}
+              type="button"
+              className={`pm-status-emoji-btn${statusEmoji === e ? ' pm-status-emoji-btn--active' : ''}`}
+              onClick={() => setStatusEmoji(prev => prev === e ? '' : e)}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+        <input
+          className="pm-input"
+          style={{ marginTop: 10, marginBottom: 10 }}
+          placeholder="What's on your mind? (max 80 chars)"
+          maxLength={80}
+          value={statusText}
+          onChange={e => setStatusText(e.target.value)}
+        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="pm-btn pm-btn--primary pm-btn--sm"
+            onClick={() => onSaveStatus(statusText, statusEmoji)}
+            disabled={statusPending}
+          >
+            {statusPending ? <span className="pm-spinner" style={{ width: 12, height: 12 }} /> : <Save size={13} />}
+            Save Status
+          </button>
+          <button
+            className="pm-btn pm-btn--ghost pm-btn--sm"
+            onClick={() => { setStatusText(''); setStatusEmoji(''); onSaveStatus('', ''); }}
+            disabled={statusPending}
+          >
+            Clear
+          </button>
         </div>
       </div>
 

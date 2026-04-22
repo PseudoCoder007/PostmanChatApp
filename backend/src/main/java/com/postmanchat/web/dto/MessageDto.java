@@ -15,6 +15,7 @@ public record MessageDto(
         Instant createdAt,
         Instant editedAt,
         UUID replyTo,
-        List<ReactionCount> reactions
+        List<ReactionCount> reactions,
+        UUID forwardedFromId
 ) {
 }

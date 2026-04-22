@@ -4,7 +4,27 @@ PostmanChat is a full-stack realtime messaging platform built with React, Spring
 
 ## Version 2
 
-`v2.2.0` is the current release.
+`v2.3.0` is the current release.
+
+### v2.3.0 - Connected, Secure & Alive
+
+**Phase 1.5 Bridge Release - Shipped:**
+
+- **Security hardening** - sign-out-all session control, external-link safety interstitials, and expanded request rate limiting
+- **Custom user status** - emoji + text status on profiles and social surfaces
+- **Mutual friends** - profile modals now show mutual-friend count and sample avatars
+- **Voice messages** - microphone capture in the composer with inline audio playback
+- **Message forwarding** - per-message forward action with room picker and forwarded banner
+- **User reporting** - per-message reporting flow with reason picker and backend report queue
+- **Activity signals** - active badges, streak indicators, and away banners
+
+**Plus 36 tracked bug fixes** including the mobile room-switcher regression fix and the reaction rule fix that now enforces one active emoji per user per message.
+
+Version markers:
+- Frontend package: `2.3.0`
+- Backend artifact: `2.3.0`
+- Release notes: [`CHANGELOG.md`](CHANGELOG.md)
+- Phase 1.5 release plan: [`docs/new-features/PHASE_1_5_PLAN_v2_3.md`](docs/new-features/PHASE_1_5_PLAN_v2_3.md)
 
 ### v2.2.0 — Chat Engagement & Collaboration Update
 
@@ -124,6 +144,7 @@ PostWebAppforMessaging/
 ## Navigation
 
 - [claude.md](claude.md): root agent entrypoint that forwards to the docs hub
+- [CHANGELOG.md](CHANGELOG.md): official release history and version notes
 - [docs/project-docs/README.md](docs/project-docs/README.md): canonical documentation hub and required read order
 - [docs/project-docs/claude.md](docs/project-docs/claude.md): fast-entry repo map for Claude, Codex, and other agents
 - [docs/project-docs/CLAUDE_DEV_PROTOCOL.md](docs/project-docs/CLAUDE_DEV_PROTOCOL.md): concise planning and implementation rules
@@ -243,19 +264,14 @@ Recommended production auth URLs:
 - `https://postmanchat.live/login`
 - `https://postmanchat.live/reset-password`
 
-## What Makes This v2 Release Clear
+## Release Capture
 
-To make this release read as Version 2, the repo now includes the pieces that matter most:
+The repo now captures official release state in four places:
 
-- Visible semantic version in the frontend package
-- Visible backend artifact version
-- README section that describes what changed in v2
-
-If you want to make the release even more explicit later, the next useful additions would be:
-
-- A GitHub release tagged `v2.0.0`
-- A changelog file such as `CHANGELOG.md`
-- An in-app footer/version label like `PostmanChat v2`
+- `frontend/package.json` for the frontend app version
+- `backend/pom.xml` for the backend artifact version
+- `README.md` for the current public release summary
+- `CHANGELOG.md` for formal version-by-version release notes
 
 ## Security Notes
 

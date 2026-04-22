@@ -2,6 +2,8 @@ package com.postmanchat.web;
 
 import com.postmanchat.service.FriendService;
 import com.postmanchat.web.dto.FriendRequestDto;
+import com.postmanchat.web.dto.MutualFriendsDto;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,6 +31,7 @@ public class FriendController {
     }
 
     @PostMapping("/{targetUserId}/request")
+    @RateLimiter(name = "friendRequest")
     public FriendRequestDto sendRequest(@PathVariable UUID targetUserId) {
         return friendService.sendRequest(targetUserId);
     }
@@ -54,5 +57,10 @@ public class FriendController {
     public ResponseEntity<Void> unblockUser(@PathVariable UUID targetUserId) {
         friendService.unblockUser(targetUserId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{targetUserId}/mutual")
+    public MutualFriendsDto getMutualFriends(@PathVariable UUID targetUserId) {
+        return friendService.getMutualFriends(targetUserId);
     }
 }

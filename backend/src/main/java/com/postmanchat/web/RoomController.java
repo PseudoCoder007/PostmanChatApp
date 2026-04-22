@@ -7,6 +7,7 @@ import com.postmanchat.web.dto.MessageDto;
 import com.postmanchat.web.dto.RoomJoinRequestDto;
 import com.postmanchat.web.dto.RoomDto;
 import com.postmanchat.web.dto.SendMessageRequest;
+import com.postmanchat.web.dto.StreakDto;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -111,5 +112,10 @@ public class RoomController {
             @Valid @RequestBody SendMessageRequest request
     ) {
         return messageService.sendMessage(roomId, request);
+    }
+
+    @GetMapping("/{roomId}/streak")
+    public StreakDto getStreak(@PathVariable UUID roomId) {
+        return roomService.getStreak(roomId);
     }
 }

@@ -1,0 +1,3 @@
+ALTER TABLE profiles
+    ADD COLUMN IF NOT EXISTS status_text  VARCHAR(80),
+    ADD COLUMN IF NOT EXISTS status_emoji VARCHAR(8);

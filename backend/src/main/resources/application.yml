@@ -72,6 +72,14 @@ resilience4j:
         limit-for-period: 60
         limit-refresh-period: 1m
         timeout-duration: 0s
+      friendRequest:
+        limit-for-period: 10
+        limit-refresh-period: 1m
+        timeout-duration: 0s
+      submitReport:
+        limit-for-period: 5
+        limit-refresh-period: 1m
+        timeout-duration: 0s
 
 logging:
   level:

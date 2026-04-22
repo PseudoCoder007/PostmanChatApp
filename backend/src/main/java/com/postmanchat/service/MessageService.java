@@ -182,7 +182,7 @@ public class MessageService {
         String senderDisplayName = sender != null ? sender.getDisplayName() : "Unknown user";
         String senderUsername = sender != null ? sender.getUsername() : "unknown";
         MessageDto tombstone = new MessageDto(
-                messageId, roomId, userId, senderDisplayName, senderUsername, "", null, message.getCreatedAt(), message.getEditedAt(), message.getReplyTo(), List.of()
+                messageId, roomId, userId, senderDisplayName, senderUsername, "", null, message.getCreatedAt(), message.getEditedAt(), message.getReplyTo(), List.of(), null
         );
         messagingTemplate.convertAndSend(topic(roomId), new WsMessagePayload("MESSAGE_DELETED", tombstone));
     }
@@ -227,14 +227,46 @@ public class MessageService {
         if (emoji == null || emoji.isBlank() || emoji.length() > 32) {
             throw new IllegalArgumentException("Invalid emoji");
         }
-        Optional<MessageReaction> existing = reactionRepository.findByMessageIdAndUserIdAndEmoji(messageId, userId, emoji);
-        if (existing.isPresent()) {
-            reactionRepository.delete(existing.get());
+        List<MessageReaction> existingReactions = reactionRepository.findByMessageIdAndUserId(messageId, userId);
+        Optional<MessageReaction> sameEmoji = existingReactions.stream()
+                .filter(reaction -> reaction.getEmoji().equals(emoji))
+                .findFirst();
+        if (sameEmoji.isPresent()) {
+            reactionRepository.delete(sameEmoji.get());
         } else {
+            if (!existingReactions.isEmpty()) {
+                reactionRepository.deleteAll(existingReactions);
+            }
             reactionRepository.save(new MessageReaction(UUID.randomUUID(), messageId, userId, emoji));
         }
         MessageDto dto = toMessageDto(message);
         messagingTemplate.convertAndSend(topic(message.getRoomId()), new WsMessagePayload("REACTION_UPDATE", dto));
+        return dto;
+    }
+
+    @Transactional
+    public MessageDto forwardMessage(UUID messageId, UUID targetRoomId) {
+        UUID userId = Authz.requireUserId();
+        Message original = messageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+        roomService.assertMember(original.getRoomId(), userId);
+        roomService.assertMember(targetRoomId, userId);
+        Room targetRoom = roomService.findRoom(targetRoomId);
+        if (targetRoom.getType() == RoomType.direct) {
+            UUID peerId = roomMemberRepository.findByIdRoomId(targetRoomId).stream()
+                    .map(m -> m.getId().getUserId())
+                    .filter(id -> !id.equals(userId))
+                    .findFirst().orElseThrow();
+            if (friendService.isBlockedBetween(userId, peerId)) {
+                throw new AccessDeniedException("Cannot forward — one user has blocked the other");
+            }
+        }
+        String body = original.getContent() == null ? "" : original.getContent();
+        Message forwarded = new Message(UUID.randomUUID(), targetRoomId, userId, body);
+        forwarded.setForwardedFromId(messageId);
+        Message saved = messageRepository.save(forwarded);
+        MessageDto dto = toMessageDto(saved);
+        messagingTemplate.convertAndSend(topic(targetRoomId), new WsMessagePayload("MESSAGE_CREATED", dto));
         return dto;
     }
 

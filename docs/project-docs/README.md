@@ -2,6 +2,8 @@
 
 This folder is the canonical documentation hub for repo navigation and agent workflow.
 
+Current shipped release: `v2.3.0` (`Connected, Secure & Alive`)
+
 ## Read Order For Agents
 
 Before planning or executing work in this repo, read these files in order:
@@ -16,7 +18,8 @@ Before planning or executing work in this repo, read these files in order:
 - `claude.md`: fast-entry repo map
 - `CLAUDE_DEV_PROTOCOL.md`: working rules for high-signal implementation
 - `ARCHITECTURE_MAP.md`: deeper subsystem map, route map, and backend API inventory
-- `BUG_TRACKER.md`: professional bug log — every reported issue, root cause, fix, and affected files
+- `BUG_TRACKER.md`: professional bug log - every reported issue, root cause, fix, and affected files
+- `CHANGELOG.md` (repo root): official release history and shipped version notes
 
 ## Related Docs
 
@@ -31,3 +34,4 @@ Update this folder when you:
 - add or remove frontend routes or backend controllers
 - change auth, realtime, or deployment flow
 - move ownership between major frontend or backend modules
+- ship a new tagged repo version and need the docs hub to point at the latest release notes

@@ -1142,15 +1142,35 @@ body::before {
   flex-shrink: 0;
 }
 
+.pm-msg-area__room-meta-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
 .pm-msg-area__room-name {
   font-size: 15px;
   font-weight: 700;
   color: var(--pm-text);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pm-msg-area__meta {
   font-size: 12px;
   color: var(--pm-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pm-msg-area__header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .pm-msg-stream {
@@ -3451,12 +3471,15 @@ body::before {
   .pm-rooms-panel--mobile-open {
     display: flex !important;
     position: fixed;
-    inset: 0;
+    top: var(--pm-topbar-h);
+    right: 0;
+    bottom: 64px;
+    left: 0;
     z-index: 150;
     width: 100%;
-    height: 100%;
+    height: auto;
     background: var(--pm-bg-mid);
-    padding-bottom: 70px;
+    border-top: 1px solid var(--pm-border);
   }
 
   .pm-rooms-mobile-toggle {
@@ -3566,6 +3589,21 @@ body::before {
   .ft-inner { padding: 28px 0 20px; gap: 24px; }
   .ft-bottom { font-size: 10px; gap: 6px; }
   .pm-auth-card__icon-wrap { width: 40px; height: 40px; }
+  .pm-msg-area__header {
+    padding: 12px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .pm-msg-area__room-meta-wrap {
+    order: 2;
+    flex-basis: 100%;
+  }
+  .pm-msg-area__header-actions {
+    margin-left: 0;
+  }
+  .pm-rooms-mobile-toggle {
+    min-width: fit-content;
+  }
 }
 
 /* Tablet adjustments */
@@ -3952,4 +3990,215 @@ body::before {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+/* ── v2.3 Security & Engagement ─────────────────────────────── */
+
+.pm-link-interstitial-url {
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--pm-text-muted);
+  background: var(--pm-bg-mid);
+  border: 1px solid var(--pm-border);
+  border-radius: var(--pm-r-md);
+  padding: 8px 12px;
+  margin: 4px 0;
+  font-family: monospace;
+}
+
+/* ── v2.3 Activity Signals ───────────────────────────────────── */
+
+.pm-active-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: var(--pm-r-pill);
+  background: var(--pm-xp-dim, rgba(34,197,94,0.12));
+  color: var(--pm-xp);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.pm-away-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--pm-accent-dim);
+  border-bottom: 1px solid var(--pm-border-soft);
+  font-size: 12px;
+  color: var(--pm-text-soft);
+  padding: 8px 16px;
+  flex-shrink: 0;
+}
+
+/* ── v2.3 User Report ────────────────────────────────────────── */
+
+.pm-report-reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-report-reason-item {
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: var(--pm-r-md);
+  background: var(--pm-bg-mid);
+  border: 1px solid var(--pm-border);
+  color: var(--pm-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.pm-report-reason-item:hover {
+  border-color: var(--pm-accent);
+}
+
+.pm-report-reason-item--selected {
+  border-color: var(--pm-accent);
+  background: var(--pm-accent-dim);
+}
+
+/* ── v2.3 Message Forwarding ─────────────────────────────────── */
+
+.pm-forwarded-banner {
+  font-size: 11px;
+  color: var(--pm-text-muted);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pm-msg-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 60;
+  min-width: 140px;
+}
+
+.pm-msg-menu-trigger {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pm-msg-bubble:hover .pm-msg-menu-trigger,
+.pm-msg-bubble--own:hover .pm-msg-menu-trigger {
+  opacity: 1;
+}
+
+/* ── v2.3 Voice Messages ─────────────────────────────────────── */
+
+.pm-voice-msg__player {
+  display: block;
+  width: 240px;
+  max-width: 100%;
+  height: 36px;
+  accent-color: var(--pm-accent);
+  margin: 4px 0;
+}
+
+.pm-composer__record-btn {
+  color: var(--pm-text-muted);
+  transition: color 0.15s;
+}
+
+.pm-composer__record-btn:hover {
+  color: var(--pm-danger);
+}
+
+/* ── v2.3 Mutual Friends ─────────────────────────────────────── */
+
+.pm-avatar--xs {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  font-size: 8px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--pm-bg-mid);
+  border: 1.5px solid var(--pm-bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-avatar--xs img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pm-avatar-stack {
+  display: flex;
+}
+
+.pm-avatar-stack .pm-avatar--xs + .pm-avatar--xs {
+  margin-left: -6px;
+}
+
+.pm-profile-modal__mutual {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--pm-text-muted);
+  margin-top: 8px;
+}
+
+/* ── v2.3 Custom Status ──────────────────────────────────────── */
+
+.pm-status-emoji-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.pm-status-emoji-btn {
+  font-size: 18px;
+  background: var(--pm-bg-mid);
+  border: 1px solid var(--pm-border);
+  border-radius: var(--pm-r-md);
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.pm-status-emoji-btn:hover {
+  border-color: var(--pm-accent);
+  background: var(--pm-accent-dim);
+}
+
+.pm-status-emoji-btn--active {
+  border-color: var(--pm-accent);
+  background: var(--pm-accent-dim);
+  box-shadow: 0 0 0 2px rgba(74, 244, 255, 0.2);
+}
+
+.pm-profile-modal__custom-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--pm-text-soft);
+  margin: 4px 0 2px;
+}
+
+.pm-friend-item__custom-status {
+  font-size: 11px;
+  color: var(--pm-text-muted);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
 }

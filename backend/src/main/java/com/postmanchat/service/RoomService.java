@@ -7,8 +7,10 @@ import com.postmanchat.domain.RoomMember;
 import com.postmanchat.domain.RoomMemberId;
 import com.postmanchat.domain.RoomType;
 import com.postmanchat.domain.RoomVisibility;
+import com.postmanchat.repo.MessageRepository;
 import com.postmanchat.repo.ProfileRepository;
 import com.postmanchat.repo.RoomJoinRequestRepository;
+import com.postmanchat.repo.RoomLastMessage;
 import com.postmanchat.repo.RoomMemberRepository;
 import com.postmanchat.repo.RoomRepository;
 import com.postmanchat.web.Authz;
@@ -17,6 +19,7 @@ import com.postmanchat.web.dto.ProfileDto;
 import com.postmanchat.web.dto.RoomJoinRequestDto;
 import com.postmanchat.web.dto.RoomDto;
 import com.postmanchat.web.dto.RoomReadEventDto;
+import com.postmanchat.web.dto.StreakDto;
 import com.postmanchat.web.dto.WsMessagePayload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
@@ -27,8 +30,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class RoomService {
@@ -42,6 +47,7 @@ public class RoomService {
     private final ProgressionService progressionService;
     private final QuestService questService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MessageRepository messageRepository;
 
     public RoomService(
             RoomRepository roomRepository,
@@ -52,7 +58,8 @@ public class RoomService {
             FriendService friendService,
             ProgressionService progressionService,
             QuestService questService,
-            SimpMessagingTemplate messagingTemplate
+            SimpMessagingTemplate messagingTemplate,
+            MessageRepository messageRepository
     ) {
         this.roomRepository = roomRepository;
         this.roomMemberRepository = roomMemberRepository;
@@ -63,14 +70,20 @@ public class RoomService {
         this.progressionService = progressionService;
         this.questService = questService;
         this.messagingTemplate = messagingTemplate;
+        this.messageRepository = messageRepository;
     }
 
     @Transactional(readOnly = true)
     public List<RoomDto> listMyRooms(String query) {
         UUID userId = Authz.requireUserId();
         String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        return roomRepository.findRoomsForUser(userId).stream()
-                .map(room -> toRoomDto(room, userId))
+        List<Room> rooms = roomRepository.findRoomsForUser(userId);
+        List<UUID> roomIds = rooms.stream().map(Room::getId).toList();
+        Map<UUID, Instant> lastMessageAtMap = roomIds.isEmpty() ? Map.of() :
+                messageRepository.findLastMessageAtForRooms(roomIds).stream()
+                        .collect(Collectors.toMap(RoomLastMessage::getRoomId, RoomLastMessage::getLastAt));
+        return rooms.stream()
+                .map(room -> toRoomDto(room, userId, lastMessageAtMap.get(room.getId())))
                 .filter(room -> normalized.isBlank() || matchesSearch(room, normalized))
                 .toList();
     }
@@ -80,7 +93,7 @@ public class RoomService {
         UUID userId = Authz.requireUserId();
         String normalized = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         return roomRepository.findAllGroupRooms().stream()
-                .map(room -> toRoomDto(room, userId))
+                .map(room -> toRoomDto(room, userId, null))
                 .filter(room -> normalized.isBlank() || matchesSearch(room, normalized))
                 .toList();
     }
@@ -116,7 +129,7 @@ public class RoomService {
         roomRepository.save(room);
         roomMemberRepository.save(new RoomMember(new RoomMemberId(room.getId(), userId), "owner"));
         questService.handleGroupRoomCreated(userId);
-        return toRoomDto(room, userId);
+        return toRoomDto(room, userId, null);
     }
 
     @Transactional(readOnly = true)
@@ -140,12 +153,12 @@ public class RoomService {
             throw new IllegalArgumentException("Only group rooms can be joined");
         }
         if (roomMemberRepository.existsByIdRoomIdAndIdUserId(roomId, userId)) {
-            return toRoomDto(room, userId);
+            return toRoomDto(room, userId, null);
         }
         if (room.getVisibility() == RoomVisibility.public_room) {
             roomMemberRepository.save(new RoomMember(new RoomMemberId(roomId, userId), "member"));
             roomJoinRequestRepository.findByIdRoomIdAndIdUserId(roomId, userId).ifPresent(roomJoinRequestRepository::delete);
-            return toRoomDto(room, userId);
+            return toRoomDto(room, userId, null);
         }
         RoomJoinRequest existing = roomJoinRequestRepository.findByIdRoomIdAndIdUserId(roomId, userId)
                 .orElseGet(() -> new RoomJoinRequest(new RoomJoinRequestId(roomId, userId)));
@@ -153,7 +166,7 @@ public class RoomService {
         existing.setReviewedAt(null);
         existing.setReviewedBy(null);
         roomJoinRequestRepository.save(existing);
-        return toRoomDto(room, userId);
+        return toRoomDto(room, userId, null);
     }
 
     @Transactional(readOnly = true)
@@ -187,7 +200,7 @@ public class RoomService {
         if (!roomMemberRepository.existsByIdRoomIdAndIdUserId(roomId, targetUserId)) {
             roomMemberRepository.save(new RoomMember(new RoomMemberId(roomId, targetUserId), "member"));
         }
-        return toRoomDto(room, targetUserId);
+        return toRoomDto(room, targetUserId, null);
     }
 
     @Transactional
@@ -219,7 +232,7 @@ public class RoomService {
             roomMemberRepository.save(new RoomMember(new RoomMemberId(roomId, targetUserId), "member"));
         }
         roomJoinRequestRepository.findByIdRoomIdAndIdUserId(roomId, targetUserId).ifPresent(roomJoinRequestRepository::delete);
-        return toRoomDto(room, targetUserId);
+        return toRoomDto(room, targetUserId, null);
     }
 
     private void assertOwner(UUID roomId, UUID userId) {
@@ -244,7 +257,7 @@ public class RoomService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         for (Room candidate : roomRepository.findDirectRoomsBetween(userId, targetUserId)) {
             if (roomMemberRepository.countByIdRoomId(candidate.getId()) == 2) {
-                return toRoomDto(candidate, userId);
+                return toRoomDto(candidate, userId, null);
             }
         }
         ProfileDto targetProfile = profileRepository.findById(targetUserId)
@@ -254,7 +267,7 @@ public class RoomService {
         roomRepository.save(room);
         roomMemberRepository.save(new RoomMember(new RoomMemberId(room.getId(), userId), "owner"));
         roomMemberRepository.save(new RoomMember(new RoomMemberId(room.getId(), targetUserId), "member"));
-        return toRoomDto(room, userId);
+        return toRoomDto(room, userId, null);
     }
 
     @Transactional
@@ -282,10 +295,26 @@ public class RoomService {
                 .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("Not a member of this room"));
         member.setMuted(!member.isMuted());
         roomMemberRepository.save(member);
-        return toRoomDto(findRoom(roomId), userId);
+        return toRoomDto(findRoom(roomId), userId, null);
     }
 
-    private RoomDto toRoomDto(Room room, UUID currentUserId) {
+    @Transactional(readOnly = true)
+    public StreakDto getStreak(UUID roomId) {
+        UUID userId = Authz.requireUserId();
+        assertMember(roomId, userId);
+        List<java.sql.Date> dates = messageRepository.findDistinctMessageDatesLastWeek(roomId);
+        if (dates.isEmpty()) return new StreakDto(0);
+        java.time.LocalDate today = java.time.LocalDate.now();
+        int streak = 0;
+        for (int i = 0; i < dates.size(); i++) {
+            java.time.LocalDate d = dates.get(i).toLocalDate();
+            if (d.equals(today.minusDays(i))) streak++;
+            else break;
+        }
+        return new StreakDto(streak);
+    }
+
+    private RoomDto toRoomDto(Room room, UUID currentUserId, Instant lastMessageAt) {
         ProfileDto directPeer = null;
         Instant peerLastReadAt = null;
         Optional<RoomMember> currentMemberOpt = roomMemberRepository.findByIdRoomIdAndIdUserId(room.getId(), currentUserId);
@@ -305,7 +334,7 @@ public class RoomService {
                         .orElse(null);
             }
         }
-        return DtoMapper.toRoomDto(room, directPeer, member, currentUserRole, memberCount, peerLastReadAt, muted);
+        return DtoMapper.toRoomDto(room, directPeer, member, currentUserRole, memberCount, peerLastReadAt, muted, lastMessageAt);
     }
 
     private static boolean matchesSearch(RoomDto room, String normalized) {

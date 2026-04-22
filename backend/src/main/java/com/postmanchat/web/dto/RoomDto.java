@@ -18,6 +18,7 @@ public record RoomDto(
         String currentUserRole,
         long memberCount,
         Instant peerLastReadAt,
-        boolean muted
+        boolean muted,
+        Instant lastMessageAt
 ) {
 }

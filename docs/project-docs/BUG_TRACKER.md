@@ -1,9 +1,9 @@
 # Bug Tracker — PostmanChat
 
 **Format version:** 1.0  
-**Last updated:** 2026-04-22  
-**Total bugs logged:** 34  
-**Fixed:** 34 | **Open:** 0 | **Won't Fix:** 0
+**Last updated:** 2026-04-23  
+**Total bugs logged:** 36  
+**Fixed:** 36 | **Open:** 0 | **Won't Fix:** 0
 
 ---
 
@@ -11,6 +11,8 @@
 
 | ID | Title | Severity | Area | Status |
 |----|-------|----------|------|--------|
+| [BUG-036](#bug-036) | Reactions allow one user to stack multiple different emojis on the same message | Medium | Backend / Chat | Fixed |
+| [BUG-035](#bug-035) | Mobile chat room switcher is cramped and DM/Group tabs disappear from reach on narrow screens | High | Mobile / Chat | Fixed |
 | [BUG-034](#bug-034) | Authenticated workspace crashes on render with `Cannot access 'activeRoom' before initialization` | Critical | Frontend / Runtime | Fixed |
 | [BUG-033](#bug-033) | Tutorial overlay blocks entire app on every load — appears as black screen | Critical | UI / Frontend | ✅ Fixed |
 | [BUG-032](#bug-032) | Deploy regression: Flyway migration history can be broken by renamed or edited SQL files | Critical | Backend / DB / CI | ✅ Fixed |
@@ -49,6 +51,76 @@
 ---
 
 ## Detailed Entries
+
+---
+
+### BUG-036
+
+**Title:** Reactions allow one user to stack multiple different emojis on the same message  
+**Severity:** Medium  
+**Priority:** P1  
+**Status:** Fixed  
+**Category:** Backend / Chat  
+**Reported:** 2026-04-23  
+**Fixed:** 2026-04-23  
+
+**Description:**  
+A single user could react to the same message with multiple different emojis at once. This made one person count as several reactions on the same message instead of behaving like standard chat apps where each person has only one active reaction per message.
+
+**Steps to Reproduce:**  
+1. Open any room and pick a message  
+2. React with one emoji  
+3. React again with a different emoji on the same message
+
+**Expected Behavior:** The new emoji replaces the old one for that same user and message.  
+**Actual Behavior:** Both reactions remain, so one user can stack multiple emoji reactions on one message.
+
+**Root Cause:**  
+`MessageService.toggleReaction()` only checked for an exact `(messageId, userId, emoji)` match. That allowed users to add a second or third different emoji because the service never cleared other existing reactions from that same user on the same message.
+
+**Fix Applied:**  
+- Added repository lookup for all reactions by the same user on the same message  
+- If the user taps the same emoji again, it still toggles off  
+- If the user picks a different emoji, the service now removes the previous reaction first and saves only the new one  
+
+**Files Changed:**  
+- `backend/src/main/java/com/postmanchat/service/MessageService.java`
+- `backend/src/main/java/com/postmanchat/repo/MessageReactionRepository.java`
+
+---
+
+### BUG-035
+
+**Title:** Mobile chat room switcher is cramped and DM/Group tabs disappear from reach on narrow screens  
+**Severity:** High  
+**Priority:** P1  
+**Status:** Fixed  
+**Category:** Mobile / Chat  
+**Reported:** 2026-04-23  
+**Fixed:** 2026-04-23  
+
+**Description:**  
+On mobile, the DM/Group room switcher was not reliably reachable while inside a conversation. The header layout became cramped on small screens, and the room panel overlay occupied the full viewport in a way that made the mobile chat navigation feel broken or hidden compared with laptop layout.
+
+**Steps to Reproduce:**  
+1. Open the chat view on a mobile-width screen  
+2. Enter a DM or group room  
+3. Try to return to the room list and switch between DMs and Groups
+
+**Expected Behavior:** The room switcher remains easy to reopen, and the DM/Group tabs stay visible and usable on mobile.  
+**Actual Behavior:** Mobile chat navigation feels collapsed or unreachable, and the DM/Group tabs appear to disappear.
+
+**Root Cause:**  
+The message header used a desktop-style single-row layout without small-screen wrapping, so the mobile room switcher competed for space with room metadata and action buttons. At the same time, the mobile room panel overlay used a full-screen inset that did not account for the fixed topbar and bottom nav, making the switching UI feel poorly bounded on phones.
+
+**Fix Applied:**  
+- Added dedicated chat-header layout classes so room metadata can shrink safely instead of pushing controls out of view  
+- Added truncation and mobile wrapping rules for the active room title and metadata  
+- Bounded the mobile rooms overlay between the fixed topbar and bottom navigation so the DM/Group tabs stay in a predictable visible area  
+
+**Files Changed:**  
+- `frontend/src/components/views/ChatView.tsx`
+- `frontend/src/index.css`
 
 ---
 

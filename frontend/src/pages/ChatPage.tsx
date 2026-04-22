@@ -158,6 +158,13 @@ export default function ChatPage() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+  const { data: streak } = useQuery({
+    queryKey: ['streak', activeRoomId],
+    queryFn: async () => json<{ days: number }>(await apiFetch(`/api/rooms/${activeRoomId}/streak`)),
+    enabled: !!me && !!activeRoomId && activeRoom?.type === 'direct',
+    staleTime: 300000,
+    retry: false,
+  });
   const { data: pins = [] } = useQuery({
     queryKey: ['pins', activeRoomId],
     queryFn: async () => json<PinnedMessage[]>(await apiFetch(`/api/rooms/${activeRoomId}/pins`)),
@@ -266,6 +273,12 @@ export default function ChatPage() {
   }, [me]);
 
   const orderedMessages = useMemo(() => [...messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [messages]);
+  const awayMessageCount = useMemo(() => {
+    if (!me?.lastActiveAt) return 0;
+    const awayThreshold = new Date(me.lastActiveAt).getTime();
+    if (Date.now() - awayThreshold < 2 * 60 * 60 * 1000) return 0;
+    return orderedMessages.filter(m => new Date(m.createdAt).getTime() > awayThreshold && m.senderId !== me.id).length;
+  }, [me?.lastActiveAt, me?.id, orderedMessages]);
 
   async function loadMoreMessages() {
     if (!activeRoomId || loadingMoreMessages || !orderedMessages.length) return;
@@ -434,6 +447,24 @@ export default function ChatPage() {
   const updateProfile = useMutation({
     mutationFn: async (nextProfileForm: typeof profileForm) => json<Profile>(await apiFetch('/api/me', { method: 'PATCH', body: JSON.stringify(nextProfileForm) })),
     onSuccess: async () => { toast.success('Profile updated'); await refreshCore(); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const updateStatus = useMutation({
+    mutationFn: async ({ statusText, statusEmoji }: { statusText: string; statusEmoji: string }) =>
+      json<Profile>(await apiFetch('/api/me/status', { method: 'PATCH', body: JSON.stringify({ statusText: statusText || null, statusEmoji: statusEmoji || null }) })),
+    onSuccess: async () => { toast.success('Status updated'); await refreshCore(); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const forwardMessage = useMutation({
+    mutationFn: async ({ messageId, targetRoomId }: { messageId: string; targetRoomId: string }) =>
+      json<Message>(await apiFetch(`/api/messages/${messageId}/forward`, { method: 'POST', body: JSON.stringify({ targetRoomId }) })),
+    onSuccess: () => toast.success('Message forwarded'),
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const submitReport = useMutation({
+    mutationFn: async ({ messageId, reason, notes }: { messageId: string; reason: string; notes: string }) =>
+      apiFetch('/api/reports', { method: 'POST', body: JSON.stringify({ targetType: 'message', targetId: messageId, reason, notes: notes || null }) }),
+    onSuccess: () => toast.success('Report submitted. Thank you.'),
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const generateQuest = useMutation({
@@ -643,6 +674,12 @@ export default function ChatPage() {
     nav('/login');
   }
 
+  async function signOutAll() {
+    await supabase.auth.signOut({ scope: 'global' });
+    setIgrisDrawerOpen(false);
+    nav('/login');
+  }
+
   if (meLoading) {
     return (
       <div className="pm-app">
@@ -785,6 +822,16 @@ export default function ChatPage() {
     }
   }
 
+  async function handleVoiceSend(file: File) {
+    if (!activeRoomId) return;
+    try {
+      const attachment = await uploadAttachment.mutateAsync(file);
+      await sendMessage.mutateAsync({ roomId: activeRoomId, content: '', attachmentId: attachment.id });
+    } catch (error) {
+      toast.error(getUserFriendlyErrorMessage(error instanceof Error ? error : String(error)));
+    }
+  }
+
   function handleDraftChange(nextDraft: string) {
     setDraft(nextDraft);
     if (activeRoomId) {
@@ -916,6 +963,12 @@ export default function ChatPage() {
               onLoadMore={() => void loadMoreMessages()}
               hasMoreMessages={hasMoreMessages}
               loadingMoreMessages={loadingMoreMessages}
+              onSendVoice={(file) => void handleVoiceSend(file)}
+              voicePending={uploadAttachment.isPending && sendMessage.isPending}
+              onForwardMessage={(messageId, targetRoomId) => void forwardMessage.mutateAsync({ messageId, targetRoomId })}
+              onReportMessage={(messageId, reason, notes) => void submitReport.mutateAsync({ messageId, reason, notes })}
+              streakDays={streak?.days}
+              awayMessageCount={awayMessageCount}
             />
           )}
 
@@ -1001,6 +1054,8 @@ export default function ChatPage() {
               setProfileImageFile={setProfileImageFile}
               onSave={() => void handleProfileSave()}
               savePending={updateProfile.isPending}
+              onSaveStatus={(text, emoji) => void updateStatus.mutateAsync({ statusText: text, statusEmoji: emoji })}
+              statusPending={updateStatus.isPending}
               friendsCount={friends.length}
               completedQuestCount={completedQuests.length}
               xpProgress={xpProgress}
@@ -1028,6 +1083,7 @@ export default function ChatPage() {
               }}
               onReplayTutorial={() => tutorial.resetTutorial()}
               onSignOut={() => void signOut()}
+              onSignOutAll={() => void signOutAll()}
             />
           )}
         </main>

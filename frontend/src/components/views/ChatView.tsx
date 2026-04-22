@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Hash, Plus, Search, Send, Paperclip, X,
-  Lock, Globe, ChevronDown, ChevronUp, UserPlus, Check, MoreVertical, Bell, BellOff, Smile, Pin, Menu
+  Lock, Globe, ChevronDown, ChevronUp, UserPlus, Check, MoreVertical, Bell, BellOff, Smile, Pin, Menu, Mic, Square
 } from 'lucide-react';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { resolveAttachmentUrl } from '@/lib/api';
 import ReactionPicker from '@/components/ReactionPicker';
 import PinnedMessageBanner from '@/components/PinnedMessageBanner';
@@ -10,8 +11,8 @@ import type {
   Message, Room, Profile, RoomJoinRequest, TypingEvent, RoomVisibility, Attachment, ReactionCount, PinnedMessage
 } from '@/types/chat';
 
-function renderWithMentions(content: string, myUsername?: string): React.ReactNode {
-  const parts = content.split(/(@\w+)/g);
+function renderContent(content: string, myUsername?: string, onExternalLink?: (url: string) => void): React.ReactNode {
+  const parts = content.split(/(https?:\/\/[^\s]+|@\w+)/g);
   return parts.map((part, i) => {
     if (/^@\w+$/.test(part)) {
       const isSelf = myUsername && part.toLowerCase() === `@${myUsername.toLowerCase()}`;
@@ -19,6 +20,22 @@ function renderWithMentions(content: string, myUsername?: string): React.ReactNo
         <span key={i} style={{ color: isSelf ? 'var(--pm-gold)' : 'var(--pm-accent)', fontWeight: 600 }}>
           {part}
         </span>
+      );
+    }
+    if (/^https?:\/\//i.test(part)) {
+      const isOwn = typeof window !== 'undefined' && part.includes(window.location.hostname);
+      if (isOwn) {
+        return <a key={i} href={part} target="_blank" rel="noreferrer" style={{ color: 'var(--pm-accent)', textDecoration: 'underline' }}>{part}</a>;
+      }
+      return (
+        <a
+          key={i}
+          href={part}
+          onClick={e => { e.preventDefault(); onExternalLink?.(part); }}
+          style={{ color: 'var(--pm-accent)', textDecoration: 'underline', cursor: 'pointer' }}
+        >
+          {part}
+        </a>
       );
     }
     return part;
@@ -87,6 +104,12 @@ interface ChatViewProps {
   onLoadMore?: () => void;
   hasMoreMessages?: boolean;
   loadingMoreMessages?: boolean;
+  onSendVoice?: (file: File) => void;
+  voicePending?: boolean;
+  onForwardMessage?: (messageId: string, targetRoomId: string) => void;
+  onReportMessage?: (messageId: string, reason: string, notes: string) => void;
+  streakDays?: number;
+  awayMessageCount?: number;
 }
 
 function AttachmentPreview({ attachment }: { attachment: Attachment }) {
@@ -95,6 +118,8 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
     return <img src={url} alt={attachment.originalName} style={{ maxWidth: 240, maxHeight: 160, borderRadius: 8, display: 'block' }} />;
   if (attachment.contentType.startsWith('video/'))
     return <video src={url} controls style={{ maxWidth: 280 }} />;
+  if (attachment.contentType.startsWith('audio/'))
+    return <audio controls src={url} className="pm-voice-msg__player" />;
   return (
     <a href={url} target="_blank" rel="noreferrer" download={attachment.originalName} className="pm-msg-bubble__attachment">
       <span>📄</span>
@@ -116,13 +141,23 @@ export default function ChatView({
   messagesLoading, onUnfriend, onViewProfile, onBlock, onUnblock, onToggleMute, mutePending, onToggleReaction,
   mentionCandidates = [], pins = [], onPinMessage, onUnpinMessage, onSearchOpen,
   onLoadMore, hasMoreMessages, loadingMoreMessages,
+  onSendVoice, voicePending,
+  onForwardMessage, onReportMessage, streakDays, awayMessageCount,
 }: ChatViewProps) {
+  const { isRecording, elapsedSeconds, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
   const [showNewRoom, setShowNewRoom] = useState(false);
   const [activeTab, setActiveTab] = useState<'dm' | 'group'>('dm');
   const [showDmMenu, setShowDmMenu] = useState(false);
   const [activePickerMsgId, setActivePickerMsgId] = useState<string | null>(null);
+  const [activeMenuMsgId, setActiveMenuMsgId] = useState<string | null>(null);
+  const [forwardMsgId, setForwardMsgId] = useState<string | null>(null);
+  const [reportMsgId, setReportMsgId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState('spam');
+  const [reportNotes, setReportNotes] = useState('');
+  const [awayBannerDismissed, setAwayBannerDismissed] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mobileShowRooms, setMobileShowRooms] = useState(!activeRoomId);
+  const [pendingExternalLink, setPendingExternalLink] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dmMenuRef = useRef<HTMLDivElement>(null);
@@ -138,6 +173,7 @@ export default function ChatView({
     if (activeRoom.type === 'direct' && activeTab !== 'dm') setActiveTab('dm');
     if (activeRoom.type === 'group' && activeTab !== 'group') setActiveTab('group');
     setMobileShowRooms(false);
+    setAwayBannerDismissed(false);
   }, [activeRoom?.id]);
 
   useEffect(() => {
@@ -234,6 +270,7 @@ export default function ChatView({
               )}
               {dms.map(room => {
                 const hasDraft = hasSavedDraft(room.id, activeRoomId);
+                const isActive = room.lastMessageAt && Date.now() - new Date(room.lastMessageAt).getTime() < 86_400_000;
                 return (
                   <div
                     key={room.id}
@@ -246,7 +283,10 @@ export default function ChatView({
                         : initials(room.directPeer?.displayName ?? '?')}
                     </div>
                     <div className="pm-room-item__info">
-                      <div className="pm-room-item__name">{getRoomTitle(room)}</div>
+                      <div className="pm-room-item__name">
+                        {getRoomTitle(room)}
+                        {isActive && <span className="pm-active-badge">Active</span>}
+                      </div>
                       <div className="pm-room-item__preview">
                         {hasDraft
                           ? <span style={{ color: 'var(--pm-text-muted)', fontStyle: 'italic' }}>Draft</span>
@@ -278,6 +318,7 @@ export default function ChatView({
                   </div>
                   {channels.map(room => {
                     const hasDraft = hasSavedDraft(room.id, activeRoomId);
+                    const isActive = room.lastMessageAt && Date.now() - new Date(room.lastMessageAt).getTime() < 86_400_000;
                     return (
                       <div
                         key={room.id}
@@ -288,7 +329,10 @@ export default function ChatView({
                           {room.visibility === 'private_room' ? <Lock size={12} /> : <Hash size={12} />}
                         </div>
                         <div className="pm-room-item__info">
-                          <div className="pm-room-item__name">{room.name}</div>
+                          <div className="pm-room-item__name">
+                            {room.name}
+                            {isActive && <span className="pm-active-badge">Active</span>}
+                          </div>
                           <div className="pm-room-item__preview">
                             {hasDraft
                               ? <span style={{ color: 'var(--pm-text-muted)', fontStyle: 'italic' }}>Draft</span>
@@ -394,15 +438,20 @@ export default function ChatView({
               {activeRoom.type === 'direct'
                 ? <div className="pm-avatar pm-avatar--sm">{initials(activeRoom.directPeer?.displayName ?? '?')}</div>
                 : <Hash size={16} color="var(--pm-text-muted)" />}
-              <div>
-                <div className="pm-msg-area__room-name">{getRoomTitle(activeRoom)}</div>
+              <div className="pm-msg-area__room-meta-wrap">
+                <div className="pm-msg-area__room-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {getRoomTitle(activeRoom)}
+                  {activeRoom.type === 'direct' && streakDays !== undefined && streakDays >= 3 && (
+                    <span title={`${streakDays}-day streak!`} style={{ fontSize: 15 }}>🔥</span>
+                  )}
+                </div>
                 <div className="pm-msg-area__meta">
                   {activeRoom.type === 'group' ? `${activeRoom.memberCount} members` : (activeRoom.directPeer?.active ? 'Online' : 'Offline')}
                 </div>
               </div>
 
               {/* Right-side header controls */}
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div className="pm-msg-area__header-actions">
                 {/* Search */}
                 {onSearchOpen && (
                   <button
@@ -546,6 +595,14 @@ export default function ChatView({
                   </button>
                 </div>
               )}
+              {!awayBannerDismissed && awayMessageCount !== undefined && awayMessageCount > 0 && (
+                <div className="pm-away-banner">
+                  <span>You were away — {awayMessageCount} new message{awayMessageCount !== 1 ? 's' : ''} since you left</span>
+                  <button className="pm-icon-btn" style={{ border: 'none', marginLeft: 8 }} onClick={() => setAwayBannerDismissed(true)} title="Dismiss">
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
               {messagesLoading && (
                 <div className="pm-msg-skeleton">
                   {[0.55, 0.75, 0.45, 0.65, 0.5].map((w, i) => (
@@ -611,8 +668,40 @@ export default function ChatView({
                             <Pin size={13} style={{ color: pins.some(p => p.messageId === msg.id) ? 'var(--pm-accent)' : undefined }} />
                           </button>
                         )}
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            className="pm-icon-btn pm-msg-menu-trigger"
+                            style={{ border: 'none', padding: '0 4px', width: 20, height: 20, minWidth: 20 }}
+                            title="More options"
+                            onClick={() => setActiveMenuMsgId(prev => prev === msg.id ? null : msg.id)}
+                            onBlur={() => setTimeout(() => setActiveMenuMsgId(null), 150)}
+                          >
+                            <MoreVertical size={13} />
+                          </button>
+                          {activeMenuMsgId === msg.id && (
+                            <div className="pm-friend-menu pm-msg-menu">
+                              <button
+                                className="pm-friend-menu__item"
+                                onMouseDown={() => { setForwardMsgId(msg.id); setActiveMenuMsgId(null); }}
+                              >
+                                ⤷ Forward
+                              </button>
+                              {onReportMessage && (
+                                <button
+                                  className="pm-friend-menu__item pm-friend-menu__item--danger"
+                                  onMouseDown={() => { setReportMsgId(msg.id); setReportReason('spam'); setReportNotes(''); setActiveMenuMsgId(null); }}
+                                >
+                                  🚩 Report
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      {msg.content && <div className="pm-msg-bubble__text">{renderWithMentions(msg.content, me?.username)}</div>}
+                      {msg.forwardedFromId && (
+                        <div className="pm-forwarded-banner">⤷ Forwarded</div>
+                      )}
+                      {msg.content && <div className="pm-msg-bubble__text">{renderContent(msg.content, me?.username, setPendingExternalLink)}</div>}
                       {msg.attachment && <AttachmentPreview attachment={msg.attachment} />}
                       {reactions.length > 0 && (
                         <div className="pm-reactions">
@@ -725,21 +814,60 @@ export default function ChatView({
                 />
                 <div className="pm-composer__actions">
                   <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileChange} />
-                  <button
-                    className="pm-icon-btn"
-                    style={{ border: 'none' }}
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Attach file"
-                  >
-                    <Paperclip size={15} />
-                  </button>
-                  <button
-                    className="pm-composer__send"
-                    onClick={onSend}
-                    disabled={sendPending || (!draft.trim() && !selectedFile)}
-                  >
-                    {sendPending ? <span className="pm-spinner" style={{ width: 14, height: 14 }} /> : <Send size={14} />}
-                  </button>
+                  {!isRecording ? (
+                    <>
+                      <button
+                        className="pm-icon-btn"
+                        style={{ border: 'none' }}
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Attach file"
+                        disabled={sendPending || voicePending}
+                      >
+                        <Paperclip size={15} />
+                      </button>
+                      <button
+                        className="pm-icon-btn pm-composer__record-btn"
+                        style={{ border: 'none' }}
+                        title="Record voice message"
+                        disabled={sendPending || voicePending}
+                        onClick={() => void startRecording()}
+                      >
+                        <Mic size={15} />
+                      </button>
+                      <button
+                        className="pm-composer__send"
+                        onClick={onSend}
+                        disabled={sendPending || voicePending || (!draft.trim() && !selectedFile)}
+                      >
+                        {sendPending ? <span className="pm-spinner" style={{ width: 14, height: 14 }} /> : <Send size={14} />}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 12, color: 'var(--pm-danger)', fontVariantNumeric: 'tabular-nums', minWidth: 36 }}>
+                        {String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:{String(elapsedSeconds % 60).padStart(2, '0')}
+                      </span>
+                      <button
+                        className="pm-icon-btn"
+                        style={{ border: 'none', color: 'var(--pm-text-muted)' }}
+                        title="Cancel recording"
+                        onClick={cancelRecording}
+                      >
+                        <X size={15} />
+                      </button>
+                      <button
+                        className="pm-composer__send"
+                        style={{ background: 'var(--pm-danger)' }}
+                        title="Stop and send"
+                        onClick={async () => {
+                          const file = await stopRecording();
+                          if (file && onSendVoice) onSendVoice(file);
+                        }}
+                      >
+                        <Square size={14} fill="currentColor" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -752,6 +880,117 @@ export default function ChatView({
           </div>
         )}
       </div>
+
+      {/* Forward message room picker */}
+      {forwardMsgId && (
+        <div className="pm-modal-backdrop" onClick={() => setForwardMsgId(null)}>
+          <div className="pm-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Forward Message</span>
+              <button className="pm-icon-btn" onClick={() => setForwardMsgId(null)} title="Close"><X size={16} /></button>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--pm-text-muted)', marginBottom: 8 }}>
+              Text content only · Attachments are not forwarded
+            </p>
+            <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {visibleRooms.filter(r => r.id !== activeRoomId).map(r => (
+                <button
+                  key={r.id}
+                  className="pm-friend-menu__item"
+                  style={{ justifyContent: 'flex-start', padding: '8px 12px', borderRadius: 'var(--pm-r-md)', background: 'var(--pm-bg-mid)', border: '1px solid var(--pm-border)' }}
+                  onClick={() => {
+                    onForwardMessage?.(forwardMsgId, r.id);
+                    setForwardMsgId(null);
+                  }}
+                >
+                  {r.type === 'direct' ? '💬' : '#'} {getRoomTitle(r)}
+                </button>
+              ))}
+              {visibleRooms.filter(r => r.id !== activeRoomId).length === 0 && (
+                <div className="pm-empty"><div className="pm-empty__sub">No other rooms to forward to</div></div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report message modal */}
+      {reportMsgId && onReportMessage && (
+        <div className="pm-modal-backdrop" onClick={() => setReportMsgId(null)}>
+          <div className="pm-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Report Message</span>
+              <button className="pm-icon-btn" onClick={() => setReportMsgId(null)} title="Close"><X size={16} /></button>
+            </div>
+            <div className="pm-report-reason-list">
+              {[
+                { value: 'spam', label: '📢 Spam' },
+                { value: 'harassment', label: '😠 Harassment' },
+                { value: 'inappropriate_content', label: '🔞 Inappropriate content' },
+                { value: 'impersonation', label: '🎭 Impersonation' },
+                { value: 'other', label: '❓ Other' },
+              ].map(r => (
+                <button
+                  key={r.value}
+                  className={`pm-report-reason-item${reportReason === r.value ? ' pm-report-reason-item--selected' : ''}`}
+                  onClick={() => setReportReason(r.value)}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              className="pm-input"
+              style={{ marginTop: 10, resize: 'vertical', minHeight: 72 }}
+              placeholder="Additional notes (optional)"
+              maxLength={500}
+              value={reportNotes}
+              onChange={e => setReportNotes(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="pm-btn pm-btn--ghost pm-btn--sm" onClick={() => setReportMsgId(null)}>Cancel</button>
+              <button
+                className="pm-btn pm-btn--primary pm-btn--sm"
+                style={{ background: 'var(--pm-danger)', borderColor: 'var(--pm-danger)' }}
+                onClick={() => { onReportMessage(reportMsgId, reportReason, reportNotes); setReportMsgId(null); }}
+              >
+                Submit Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* External link safety interstitial */}
+      {pendingExternalLink && (
+        <div className="pm-modal-backdrop" onClick={() => setPendingExternalLink(null)}>
+          <div className="pm-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>Leaving PostmanChat</span>
+              <button className="pm-icon-btn" style={{ border: 'none' }} onClick={() => setPendingExternalLink(null)}>
+                <X size={16} />
+              </button>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--pm-text-soft)', marginBottom: 8 }}>
+              This link goes to an external site:
+            </p>
+            <div className="pm-link-interstitial-url">
+              {pendingExternalLink.length > 80 ? pendingExternalLink.slice(0, 80) + '…' : pendingExternalLink}
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="pm-btn pm-btn--ghost pm-btn--sm" onClick={() => setPendingExternalLink(null)}>
+                Cancel
+              </button>
+              <button
+                className="pm-btn pm-btn--primary pm-btn--sm"
+                onClick={() => { window.open(pendingExternalLink, '_blank', 'noopener,noreferrer'); setPendingExternalLink(null); }}
+              >
+                Open link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

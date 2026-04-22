@@ -45,4 +45,16 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
             @Param("q") String q,
             Pageable pageable
     );
+
+    @Query(value = "SELECT room_id AS roomId, MAX(created_at) AS lastAt FROM messages WHERE room_id IN (:roomIds) GROUP BY room_id", nativeQuery = true)
+    List<RoomLastMessage> findLastMessageAtForRooms(@Param("roomIds") List<UUID> roomIds);
+
+    @Query(value = """
+            SELECT CAST(created_at AS DATE) FROM messages
+            WHERE room_id = :roomId
+              AND created_at >= NOW() - INTERVAL '7 days'
+            GROUP BY CAST(created_at AS DATE)
+            ORDER BY CAST(created_at AS DATE) DESC
+            """, nativeQuery = true)
+    List<java.sql.Date> findDistinctMessageDatesLastWeek(@Param("roomId") UUID roomId);
 }
