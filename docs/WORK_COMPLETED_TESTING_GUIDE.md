@@ -2,7 +2,7 @@
 
 ## Overview
 ✅ **All 6 Phase 1 features: 100% Complete**  
-✅ **31 bugs fixed: 100% Complete**
+✅ **34 bugs fixed: 100% Complete**
 
 ---
 
@@ -127,9 +127,11 @@
 
 ## Bug Fixes - What Was Fixed
 
-**31 bugs fixed (100% complete)**
+**34 bugs fixed (100% complete)**
 
 **Critical fixes:**
+- **BUG-034**: Workspace render crash from `activeRoom` initialization order ✅
+- **BUG-033**: Black screen from tutorial overlay timing ✅
 - **BUG-031**: Flyway V10 checksum mismatch (backend startup failure) ✅
 - **BUG-027**: Browser notifications not working ✅
 - **BUG-026**: Message pagination loading all messages at once ✅

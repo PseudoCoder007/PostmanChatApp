@@ -25,6 +25,15 @@ function renderWithMentions(content: string, myUsername?: string): React.ReactNo
   });
 }
 
+function hasSavedDraft(roomId: string, activeRoomId?: string) {
+  if (roomId === activeRoomId) return false;
+  try {
+    return !!localStorage.getItem(`postmanchat.draft.${roomId}`);
+  } catch {
+    return false;
+  }
+}
+
 interface ChatViewProps {
   visibleRooms: Room[];
   discoverableRooms: Room[];
@@ -224,7 +233,7 @@ export default function ChatView({
                 </div>
               )}
               {dms.map(room => {
-                const hasDraft = room.id !== activeRoomId && !!localStorage.getItem(`postmanchat.draft.${room.id}`);
+                const hasDraft = hasSavedDraft(room.id, activeRoomId);
                 return (
                   <div
                     key={room.id}
@@ -268,7 +277,7 @@ export default function ChatView({
                     My Rooms
                   </div>
                   {channels.map(room => {
-                    const hasDraft = room.id !== activeRoomId && !!localStorage.getItem(`postmanchat.draft.${room.id}`);
+                    const hasDraft = hasSavedDraft(room.id, activeRoomId);
                     return (
                       <div
                         key={room.id}

@@ -7,8 +7,12 @@ const STORAGE_KEY = "postmanchat.theme";
 function getPreferredTheme(): ThemeMode {
   if (typeof window === "undefined") return "dark";
 
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (stored === "dark" || stored === "light") return stored;
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === "dark" || stored === "light") return stored;
+  } catch {
+    // Ignore storage failures and use the default theme.
+  }
   return "dark";
 }
 
@@ -27,7 +31,11 @@ export function useThemeMode() {
   useEffect(() => {
     applyTheme(theme);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, theme);
+      try {
+        window.localStorage.setItem(STORAGE_KEY, theme);
+      } catch {
+        // Ignore storage failures and keep the theme in memory.
+      }
     }
   }, [theme]);
 

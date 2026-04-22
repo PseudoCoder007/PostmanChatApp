@@ -2,8 +2,8 @@
 
 **Format version:** 1.0  
 **Last updated:** 2026-04-22  
-**Total bugs logged:** 33  
-**Fixed:** 33 | **Open:** 0 | **Won't Fix:** 0
+**Total bugs logged:** 34  
+**Fixed:** 34 | **Open:** 0 | **Won't Fix:** 0
 
 ---
 
@@ -11,6 +11,7 @@
 
 | ID | Title | Severity | Area | Status |
 |----|-------|----------|------|--------|
+| [BUG-034](#bug-034) | Authenticated workspace crashes on render with `Cannot access 'activeRoom' before initialization` | Critical | Frontend / Runtime | Fixed |
 | [BUG-033](#bug-033) | Tutorial overlay blocks entire app on every load — appears as black screen | Critical | UI / Frontend | ✅ Fixed |
 | [BUG-032](#bug-032) | Deploy regression: Flyway migration history can be broken by renamed or edited SQL files | Critical | Backend / DB / CI | ✅ Fixed |
 | [BUG-031](#bug-031) | Flyway V10 checksum mismatch — backend fails to start | Critical | Backend / DB | ✅ Fixed |
@@ -48,6 +49,47 @@
 ---
 
 ## Detailed Entries
+
+---
+
+### BUG-034
+
+**Title:** Authenticated workspace crashes on render with `Cannot access 'activeRoom' before initialization`  
+**Severity:** Critical  
+**Priority:** P0  
+**Status:** Fixed  
+**Category:** Frontend / Runtime  
+**Reported:** 2026-04-22  
+**Fixed:** 2026-04-22  
+
+**Description:**  
+After login, the app still showed a black screen even in local development. Once a top-level error boundary was added, the real runtime error surfaced on screen: `Cannot access 'activeRoom' before initialization`.
+
+**Steps to Reproduce:**  
+1. Run the frontend locally and sign in  
+2. Navigate into the authenticated workspace (`/`)  
+3. React mounts, the page title updates, then the workspace crashes before rendering
+
+**Expected Behavior:** Chat workspace renders after login.  
+**Actual Behavior:** React throws a temporal dead zone error and the workspace fails to render.
+
+**Root Cause:**  
+In `ChatPage.tsx`, the `mentionCandidates` memo referenced `activeRoom` before `activeRoom` itself was declared. Because `activeRoom` is a `const`, this triggered a temporal dead zone runtime exception during render: `Cannot access 'activeRoom' before initialization`. The older black-screen symptom made this look like the tutorial overlay bug, but the actual local failure was a render-order bug in the main workspace component.
+
+**Fix Applied:**  
+- Moved the `activeRoom` derived value above the `mentionCandidates` memo so it is initialized before use  
+- Added `AppErrorBoundary` so future render crashes show the actual error instead of a silent black screen  
+- Added root shell CSS for `app-shell`, `page-transition`, and the error state so the fallback always renders visibly  
+- Hardened `localStorage` access for theme, drafts, and sound preferences so storage failures do not crash the UI  
+- Added explicit loading/error UI around the initial `/api/me` fetch so auth/profile failures no longer degrade into a blank viewport
+
+**Files Changed:**  
+- `frontend/src/pages/ChatPage.tsx`
+- `frontend/src/components/views/ChatView.tsx`
+- `frontend/src/hooks/useThemeMode.ts`
+- `frontend/src/components/AppErrorBoundary.tsx`
+- `frontend/src/main.tsx`
+- `frontend/src/index.css`
 
 ---
 

@@ -16,7 +16,7 @@ PostmanChat is a full-stack realtime messaging platform built with React, Spring
 - Draft Persistence: Auto-save message drafts per room in browser localStorage; drafts restore when switching back to room; cleared after send
 - Message Search v1: Search within room messages (2+ character minimum, capped at 50 results); uses ILIKE for case-insensitive search with 30-second result caching
 
-**Plus 31 critical bug fixes** including Flyway V10 checksum fix, browser notifications fix, message pagination fix, and mobile sign-out accessibility
+**Plus 34 critical bug fixes** including the workspace black-screen/render crash fixes, Flyway V10 checksum fix, browser notifications fix, message pagination fix, and mobile sign-out accessibility
 
 Version markers:
 - Frontend package: `2.2.0`

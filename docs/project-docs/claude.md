@@ -51,6 +51,8 @@ Before fixing a bug, check `docs/project-docs/BUG_TRACKER.md` to avoid duplicate
 - `frontend/src/App.tsx`
   - Public routes: `/login`, `/signup`, `/reset-password`
   - Protected route: `/` -> `RequireAuth` -> `ChatPage`
+- `frontend/src/components/AppErrorBoundary.tsx`
+  - Top-level render safety net for surfacing runtime crashes instead of a blank screen
 - `frontend/src/pages/ChatPage.tsx`
   - Main orchestration surface
   - Fetches profile, rooms, messages, quests, leaderboard, notifications, people, join requests, and Igris history

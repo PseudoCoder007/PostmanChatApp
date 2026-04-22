@@ -93,6 +93,54 @@ html, body {
   height: 100%;
 }
 
+.app-shell,
+.page-transition {
+  min-height: 100%;
+  height: 100%;
+}
+
+.route-loading,
+.app-error-shell {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.app-error-card {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+  border-radius: var(--pm-r-lg);
+  background: var(--pm-bg-card);
+  border: 1px solid var(--pm-border-soft);
+  box-shadow: var(--pm-card-shadow);
+}
+
+.app-error-card__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--pm-text);
+}
+
+.app-error-card__body {
+  color: var(--pm-text-muted);
+}
+
+.app-error-card__stack {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 14px;
+  border-radius: var(--pm-r-md);
+  background: var(--pm-bg-elevated);
+  border: 1px solid var(--pm-border);
+  color: var(--pm-warn);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 a { color: var(--pm-accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 

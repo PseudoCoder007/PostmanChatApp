@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Brain, MessageCircle, Users, Target, Trophy, User, Settings2, Bell } from 'lucide-react';
+import { Brain, MessageCircle, Users, Target, Trophy, User, Settings2, Bell, RefreshCcw, TriangleAlert } from 'lucide-react';
 import { useStompRoom } from '@/hooks/useStompRoom';
 import { apiFetch, apiFetchForm, resolveAttachmentUrl } from '@/lib/api';
 import { getUserFriendlyErrorMessage } from '@/lib/errorMessages';
@@ -92,7 +92,13 @@ export default function ChatPage() {
   const igrisCooldownRef = useRef<{ message: string; sentAt: number } | null>(null);
   const typingIdleTimeoutRef = useRef<number | null>(null);
   const typingClearTimeoutRef = useRef<number | null>(null);
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: async () => json<Profile>(await apiFetch('/api/me')), staleTime: 60000, refetchOnWindowFocus: false, retry: false });
+  const {
+    data: me,
+    isLoading: meLoading,
+    isError: meIsError,
+    error: meError,
+    refetch: refetchMe,
+  } = useQuery({ queryKey: ['me'], queryFn: async () => json<Profile>(await apiFetch('/api/me')), staleTime: 60000, refetchOnWindowFocus: false, retry: false });
   const { data: igrisHistory = [] } = useQuery({
     queryKey: ['igris-history'],
     queryFn: async () => json<IgrisHistoryItem[]>(await apiFetch('/api/igris/history?limit=24')),
@@ -192,7 +198,11 @@ export default function ChatPage() {
   }, [me]);
 
   useEffect(() => {
-    window.localStorage.setItem('postmanchat.sound.enabled', soundEnabled ? '1' : '0');
+    try {
+      window.localStorage.setItem('postmanchat.sound.enabled', soundEnabled ? '1' : '0');
+    } catch {
+      // Ignore storage failures and keep the preference in memory.
+    }
   }, [soundEnabled]);
 
   useEffect(() => {
@@ -210,8 +220,12 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!activeRoomId) { setDraft(''); return; }
-    const saved = localStorage.getItem(`postmanchat.draft.${activeRoomId}`) ?? '';
-    setDraft(saved);
+    try {
+      const saved = localStorage.getItem(`postmanchat.draft.${activeRoomId}`) ?? '';
+      setDraft(saved);
+    } catch {
+      setDraft('');
+    }
   }, [activeRoomId]);
 
   // Mark DM room as read when user opens it
@@ -267,6 +281,14 @@ export default function ChatPage() {
       setLoadingMoreMessages(false);
     }
   }
+  const incoming = friendships.filter((item) => item.friendshipState === 'incoming');
+  const friends = friendships.filter((item) => item.friendshipState === 'accepted');
+  const blocked = friendships.filter((item) => item.friendshipState === 'blocked_by_me');
+  const onlineFriends = friends.filter((item) => item.profile.active);
+  const unread = notifications.filter((item) => !item.read);
+  const activeQuests = quests.filter((quest) => quest.status === 'assigned');
+  const completedQuests = quests.filter((quest) => quest.status === 'completed');
+  const activeRoom = allRooms.find((room) => room.id === activeRoomId);
   const mentionCandidates = useMemo(() => {
     if (!activeRoom) return [];
     if (activeRoom.type === 'direct' && activeRoom.directPeer) return [activeRoom.directPeer];
@@ -285,14 +307,6 @@ export default function ChatPage() {
   const discoverableRooms = roomSearch.trim()
     ? discoverRooms.filter((room) => !allRooms.some((ownRoom) => ownRoom.id === room.id))
     : [];
-  const incoming = friendships.filter((item) => item.friendshipState === 'incoming');
-  const friends = friendships.filter((item) => item.friendshipState === 'accepted');
-  const blocked = friendships.filter((item) => item.friendshipState === 'blocked_by_me');
-  const onlineFriends = friends.filter((item) => item.profile.active);
-  const unread = notifications.filter((item) => !item.read);
-  const activeQuests = quests.filter((quest) => quest.status === 'assigned');
-  const completedQuests = quests.filter((quest) => quest.status === 'completed');
-  const activeRoom = allRooms.find((room) => room.id === activeRoomId);
   const igrisCoinsRemaining = Math.max(0, 5 - (me?.coins ?? 0));
   const focusMissions = useMemo(
     () => buildFocusMissions({ tick: focusRefreshTick, canUseIgris: !!me?.canUseIgris, canChallengeFriends: !!me?.canChallengeFriends, activeQuestCount: activeQuests.length }),
@@ -536,7 +550,7 @@ export default function ChatPage() {
     mutationFn: async ({ roomId, content, attachmentId }: { roomId: string; content: string; attachmentId: string | null }) =>
       json<Message>(await apiFetch(`/api/rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify({ content, replyTo: null, attachmentId }) })),
     onSuccess: async (_data, variables) => {
-      localStorage.removeItem(`postmanchat.draft.${variables.roomId}`);
+      clearStoredValue(`postmanchat.draft.${variables.roomId}`);
       playUiTone('send'); setDraft(''); setSelectedFile(null); setUploadWarning(null); void refetchMessages(); await refreshCore();
     },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
@@ -629,6 +643,112 @@ export default function ChatPage() {
     nav('/login');
   }
 
+  if (meLoading) {
+    return (
+      <div className="pm-app">
+        <Sidebar
+          me={undefined}
+          activeView={activeView}
+          onNavigate={setActiveView}
+          onSignOut={() => void signOut()}
+          onLaunchMission={() => {}}
+          launchPending={false}
+          unreadCount={0}
+          unreadNotifCount={0}
+          isDark={isDark}
+          toggleTheme={toggleTheme}
+          mobileOpen={sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
+        />
+        <div className="pm-main">
+          <TopBar
+            me={undefined}
+            coins={0}
+            xp={0}
+            unreadCount={0}
+            isDark={isDark}
+            toggleTheme={toggleTheme}
+            onNotificationsClick={() => setActiveView('notifications')}
+            onSettingsClick={() => setActiveView('settings')}
+            onAvatarClick={() => setActiveView('profile')}
+            onMenuClick={() => setSidebarOpen(true)}
+            onNavigate={setActiveView}
+          />
+          <main className="pm-content">
+            <div className="pm-card pm-card--glow" style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>Connecting your account...</div>
+              <div style={{ color: 'var(--pm-text-muted)' }}>
+                PostmanChat is loading your profile and rooms.
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (meIsError || !me) {
+    return (
+      <div className="pm-app">
+        <Sidebar
+          me={undefined}
+          activeView={activeView}
+          onNavigate={setActiveView}
+          onSignOut={() => void signOut()}
+          onLaunchMission={() => {}}
+          launchPending={false}
+          unreadCount={0}
+          unreadNotifCount={0}
+          isDark={isDark}
+          toggleTheme={toggleTheme}
+          mobileOpen={sidebarOpen}
+          onCloseMobile={() => setSidebarOpen(false)}
+        />
+        <div className="pm-main">
+          <TopBar
+            me={undefined}
+            coins={0}
+            xp={0}
+            unreadCount={0}
+            isDark={isDark}
+            toggleTheme={toggleTheme}
+            onNotificationsClick={() => setActiveView('notifications')}
+            onSettingsClick={() => setActiveView('settings')}
+            onAvatarClick={() => setActiveView('profile')}
+            onMenuClick={() => setSidebarOpen(true)}
+            onNavigate={setActiveView}
+          />
+          <main className="pm-content">
+            <div className="pm-card pm-card--glow" style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 20, fontWeight: 700 }}>
+                <TriangleAlert size={22} color="var(--pm-warn)" />
+                We signed you in, but your chat profile did not load.
+              </div>
+              <div style={{ color: 'var(--pm-text-muted)', lineHeight: 1.6 }}>
+                This usually means the first authenticated request to <code>/api/me</code> failed or timed out after login.
+                Retry from here instead of getting stuck on a black screen.
+              </div>
+              {meError instanceof Error && (
+                <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--pm-bg-elevated)', border: '1px solid var(--pm-border)', color: 'var(--pm-text-soft)' }}>
+                  {getUserFriendlyErrorMessage(meError)}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <button className="pm-btn pm-btn--primary" onClick={() => void refetchMe()}>
+                  <RefreshCcw size={15} />
+                  Retry Loading Profile
+                </button>
+                <button className="pm-btn pm-btn--ghost" onClick={() => void signOut()}>
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   function openIgrisDrawer() {
     if (!me?.canUseIgris) return;
     setIgrisDrawerOpen(true);
@@ -668,8 +788,8 @@ export default function ChatPage() {
   function handleDraftChange(nextDraft: string) {
     setDraft(nextDraft);
     if (activeRoomId) {
-      if (nextDraft) localStorage.setItem(`postmanchat.draft.${activeRoomId}`, nextDraft);
-      else localStorage.removeItem(`postmanchat.draft.${activeRoomId}`);
+      if (nextDraft) setStoredValue(`postmanchat.draft.${activeRoomId}`, nextDraft);
+      else clearStoredValue(`postmanchat.draft.${activeRoomId}`);
     }
     if (!activeRoomId || activeRoom?.type !== 'direct') return;
 
@@ -1110,6 +1230,22 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
 
 function readSoundPreference() {
   try { return window.localStorage.getItem('postmanchat.sound.enabled') !== '0'; } catch { return true; }
+}
+
+function setStoredValue(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures and keep state in memory.
+  }
+}
+
+function clearStoredValue(key: string) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures and keep state in memory.
+  }
 }
 
 function createClientId() {
