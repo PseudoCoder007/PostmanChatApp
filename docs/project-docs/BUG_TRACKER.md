@@ -129,10 +129,11 @@ The message header used a desktop-style single-row layout without small-screen w
 **Title:** Authenticated workspace crashes on render with `Cannot access 'activeRoom' before initialization`  
 **Severity:** Critical  
 **Priority:** P0  
-**Status:** Fixed  
+**Status:** ✅ Fixed  
 **Category:** Frontend / Runtime  
 **Reported:** 2026-04-22  
 **Fixed:** 2026-04-22  
+**Re-applied:** 2026-04-23  
 
 **Description:**  
 After login, the app still showed a black screen even in local development. Once a top-level error boundary was added, the real runtime error surfaced on screen: `Cannot access 'activeRoom' before initialization`.
@@ -146,22 +147,15 @@ After login, the app still showed a black screen even in local development. Once
 **Actual Behavior:** React throws a temporal dead zone error and the workspace fails to render.
 
 **Root Cause:**  
-In `ChatPage.tsx`, the `mentionCandidates` memo referenced `activeRoom` before `activeRoom` itself was declared. Because `activeRoom` is a `const`, this triggered a temporal dead zone runtime exception during render: `Cannot access 'activeRoom' before initialization`. The older black-screen symptom made this look like the tutorial overlay bug, but the actual local failure was a render-order bug in the main workspace component.
+The `activeRoom` constant was referenced in the `streak` query's `enabled` condition before it was declared. Because `activeRoom` is a `const`, this triggered a temporal dead zone runtime exception during render: `Cannot access 'activeRoom' before initialization`.
 
 **Fix Applied:**  
-- Moved the `activeRoom` derived value above the `mentionCandidates` memo so it is initialized before use  
-- Added `AppErrorBoundary` so future render crashes show the actual error instead of a silent black screen  
-- Added root shell CSS for `app-shell`, `page-transition`, and the error state so the fallback always renders visibly  
-- Hardened `localStorage` access for theme, drafts, and sound preferences so storage failures do not crash the UI  
-- Added explicit loading/error UI around the initial `/api/me` fetch so auth/profile failures no longer degrade into a blank viewport
+- Moved `const activeRoom = allRooms.find((room) => room.id === activeRoomId)` declaration from line 304 to line 162, immediately after the `allRooms` query and before the `streak` query that uses it  
+- This ensures `activeRoom` is initialized before any code that references it  
+- The original fix on 2026-04-22 was on branch `claude/admiring-ramanujan-7a1da7` and wasn't merged before v2.3.0 release; now re-applied to main branch
 
 **Files Changed:**  
-- `frontend/src/pages/ChatPage.tsx`
-- `frontend/src/components/views/ChatView.tsx`
-- `frontend/src/hooks/useThemeMode.ts`
-- `frontend/src/components/AppErrorBoundary.tsx`
-- `frontend/src/main.tsx`
-- `frontend/src/index.css`
+- `frontend/src/pages/ChatPage.tsx` (moved activeRoom initialization up)
 
 ---
 

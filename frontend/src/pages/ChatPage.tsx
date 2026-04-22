@@ -158,6 +158,10 @@ export default function ChatPage() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+
+  // Derive activeRoom early - before any code uses it
+  const activeRoom = allRooms.find((room) => room.id === activeRoomId);
+
   const { data: streak } = useQuery({
     queryKey: ['streak', activeRoomId],
     queryFn: async () => json<{ days: number }>(await apiFetch(`/api/rooms/${activeRoomId}/streak`)),
@@ -301,7 +305,6 @@ export default function ChatPage() {
   const unread = notifications.filter((item) => !item.read);
   const activeQuests = quests.filter((quest) => quest.status === 'assigned');
   const completedQuests = quests.filter((quest) => quest.status === 'completed');
-  const activeRoom = allRooms.find((room) => room.id === activeRoomId);
   const mentionCandidates = useMemo(() => {
     if (!activeRoom) return [];
     if (activeRoom.type === 'direct' && activeRoom.directPeer) return [activeRoom.directPeer];
