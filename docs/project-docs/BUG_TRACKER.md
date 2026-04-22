@@ -1,9 +1,9 @@
 # Bug Tracker — PostmanChat
 
 **Format version:** 1.0  
-**Last updated:** 2026-04-21  
-**Total bugs logged:** 31  
-**Fixed:** 31 | **Open:** 0 | **Won't Fix:** 0
+**Last updated:** 2026-04-22  
+**Total bugs logged:** 32  
+**Fixed:** 31 | **Open:** 1 | **Won't Fix:** 0
 
 ---
 
@@ -11,6 +11,7 @@
 
 | ID | Title | Severity | Area | Status |
 |----|-------|----------|------|--------|
+| [BUG-032](#bug-032) | Deploy regression: Flyway migration history can be broken by renamed or edited SQL files | Critical | Backend / DB / CI | Open |
 | [BUG-031](#bug-031) | Flyway V10 checksum mismatch — backend fails to start | Critical | Backend / DB | ✅ Fixed |
 | [BUG-030](#bug-030) | Mobile: sign out button inaccessible without opening sidebar | Medium | Mobile / UX | ✅ Fixed |
 | [BUG-029](#bug-029) | Sound: nearly inaudible; not playing on first notification | Medium | UI / Audio | ✅ Fixed |
@@ -89,6 +90,51 @@ A `V14__room_read_tracking.sql` was also added as an orphaned duplicate, leaving
 
 **Protocol Violation:**  
 This was caused by violating the Flyway Safety Rule in both `claude.md` and `CLAUDE_DEV_PROTOCOL.md`: an already-applied migration version was deleted and replaced. **Never rename, delete, or reuse a Flyway migration version that has been committed or applied.**
+
+---
+
+### BUG-032
+
+**Title:** Deploy regression: Flyway migration history can be broken by renamed or edited SQL files  
+**Severity:** Critical  
+**Priority:** P0  
+**Status:** Open  
+**Category:** Backend / DB / CI  
+**Reported:** 2026-04-22  
+**Fixed:** —
+
+**Description:**  
+Production returned `502 Bad Gateway` because the backend container failed during Flyway validation. The repo state being deployed renamed and renumbered previously applied migrations, so the application never reached a healthy state on port `8080`.
+
+**Steps to Reproduce:**  
+1. Rename or reuse an already committed Flyway migration version in `backend/src/main/resources/db/migration/`  
+2. Push to `main` and let the deploy workflow rebuild the backend  
+3. Container starts, Flyway validation runs, backend exits before Tomcat becomes healthy  
+4. Nginx serves `502 Bad Gateway`
+
+**Expected Behavior:** Deploy pipeline blocks invalid migration history changes before build and deployment.  
+**Actual Behavior:** Invalid migration history reached production and crashed backend startup.
+
+**Root Cause:**  
+The repo allowed already-applied Flyway files to be renamed, deleted, or reassigned to different schema changes. Line-ending drift can also change Flyway checksums even when SQL text appears unchanged. There was no automated guard in CI to reject these changes before deployment.
+
+**Fix Applied:**  
+- Restored Flyway-safe migration layout in repo:
+  - `V10__daily_message_digest.sql`
+  - `V14__room_read_tracking.sql`
+  - removed incorrect `V10__room_read_tracking.sql`
+- Added `.gitattributes` rule to keep migration SQL files on LF line endings
+- Added `.github/scripts/check_flyway_migrations.sh`
+- Wired the migration guard into both deploy workflows so deploy stops if an existing migration is modified, deleted, renamed, copied, or if duplicate versions exist
+
+**Files Changed:**  
+- `.gitattributes`  
+- `.github/scripts/check_flyway_migrations.sh`  
+- `.github/workflows/deploy-ec2.yml`  
+- `.github/workflows/deploy.yml`  
+- `backend/src/main/resources/db/migration/V10__daily_message_digest.sql`  
+- `backend/src/main/resources/db/migration/V14__room_read_tracking.sql`  
+- `docs/project-docs/claude.md`
 
 ---
 

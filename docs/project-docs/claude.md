@@ -155,6 +155,7 @@ States returned by `FriendService.friendshipState()` and present in `Profile.fri
 - New schema work must always use the next unused version number in `backend/src/main/resources/db/migration/`.
 - Before deploy, scan the migration folder for duplicate version prefixes like two `V14__...` files.
 - If production already ran a migration, preserve that file exactly and add a new corrective migration instead of mutating history.
+- Deploy workflows run `.github/scripts/check_flyway_migrations.sh` to block modified, deleted, renamed, copied, or duplicate-version migrations before rollout.
 
 ## Key API Endpoints (Friends / Rooms)
 

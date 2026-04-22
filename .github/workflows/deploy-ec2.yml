@@ -14,6 +14,13 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Guard Flyway migrations
+      run: |
+        chmod +x .github/scripts/check_flyway_migrations.sh
+        ./.github/scripts/check_flyway_migrations.sh "${{ github.event.before }}" "${{ github.sha }}"
 
     - name: Deploy to EC2 via SSH
       uses: appleboy/ssh-action@v1.0.3
