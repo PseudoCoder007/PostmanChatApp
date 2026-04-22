@@ -1,13 +1,10 @@
-import { Trophy, Zap, Bell } from 'lucide-react';
-import type { LeaderboardEntry, NotificationItem, Profile } from '@/types/chat';
+import { Trophy, Zap } from 'lucide-react';
+import type { LeaderboardEntry, Profile } from '@/types/chat';
 import { Footer } from '@/components/ui/footer-section';
 
 interface BoardViewProps {
   leaderboard: LeaderboardEntry[];
   me: Profile | undefined;
-  notifications: NotificationItem[];
-  onMarkRead: (id: string) => void;
-  formatTime: (v: string) => string;
   initials: (v: string) => string;
 }
 
@@ -18,9 +15,8 @@ function rankBadgeClass(rank: number) {
   return 'pm-rank-badge--n';
 }
 
-export default function BoardView({ leaderboard, me, notifications, onMarkRead, formatTime, initials }: BoardViewProps) {
+export default function BoardView({ leaderboard, me, initials }: BoardViewProps) {
   const myEntry = leaderboard.find(e => e.profile.id === me?.id);
-  const unreadNotifs = notifications.filter(n => !n.read);
 
   return (
     <div>
@@ -111,32 +107,6 @@ export default function BoardView({ leaderboard, me, notifications, onMarkRead, 
             </div>
           )}
 
-          {/* Notifications */}
-          <div className="pm-card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--pm-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Bell size={14} />
-              <span style={{ fontWeight: 700, fontSize: 14 }}>Notifications</span>
-              {unreadNotifs.length > 0 && <span className="pm-badge pm-badge--danger">{unreadNotifs.length}</span>}
-            </div>
-            {notifications.length === 0 && (
-              <div className="pm-empty"><div className="pm-empty__sub">No notifications</div></div>
-            )}
-            {notifications.slice(0, 8).map(n => (
-              <div
-                key={n.id}
-                className={`pm-notif-item${!n.read ? ' unread' : ''}`}
-                onClick={() => !n.read && onMarkRead(n.id)}
-                style={{ cursor: n.read ? 'default' : 'pointer' }}
-              >
-                {!n.read && <div className="pm-notif-item__dot" />}
-                <div className="pm-notif-item__text">
-                  <strong>{n.title}</strong>
-                  <div style={{ marginTop: 2 }}>{n.body}</div>
-                </div>
-                <div className="pm-notif-item__time">{formatTime(n.createdAt)}</div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 

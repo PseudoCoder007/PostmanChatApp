@@ -1,4 +1,4 @@
-# AGENTS.md
+# claude.md
 
 ## What This Repo Is
 
@@ -9,7 +9,7 @@ PostmanChat is a full-stack realtime messaging app built with React, Vite, Sprin
 Before planning or executing work, read:
 
 1. `docs/project-docs/README.md`
-2. `docs/project-docs/AGENTS.md`
+2. `docs/project-docs/claude.md`
 3. `docs/project-docs/CLAUDE_DEV_PROTOCOL.md`
 4. `docs/project-docs/ARCHITECTURE_MAP.md`
 
@@ -42,7 +42,7 @@ Before fixing a bug, check `docs/project-docs/BUG_TRACKER.md` to avoid duplicate
 - Backend HTTP entrypoints live in `backend/src/main/java/com/postmanchat/web/`
 - Backend realtime wiring lives in `backend/src/main/java/com/postmanchat/ws/`
 - Core business logic lives in `backend/src/main/java/com/postmanchat/service/`
-- Schema changes live in `backend/src/main/resources/db/migration/` (next: V12)
+- Schema changes live in `backend/src/main/resources/db/migration/` (current highest: V16, next: V17)
 
 ## Ownership Map
 
@@ -54,9 +54,10 @@ Before fixing a bug, check `docs/project-docs/BUG_TRACKER.md` to avoid duplicate
 - `frontend/src/pages/ChatPage.tsx`
   - Main orchestration surface
   - Fetches profile, rooms, messages, quests, leaderboard, notifications, people, join requests, and Igris history
-  - Switches between `chat`, `people`, `quests`, `igris`, `board`, `levels`, `profile`, `feedback`, and `settings`
+  - Switches between `chat`, `people`, `quests`, `igris`, `board`, `notifications`, `levels`, `profile`, `feedback`, and `settings`
 - `frontend/src/components/views/`
   - Split presentation for workspace tabs
+  - `NotificationsView.tsx` — paginated notification list (20/page); receives `notifications`, `onMarkRead`, `formatTime` props from ChatPage
 - `frontend/src/lib/api.ts`
   - Authenticated fetch wrapper and WebSocket ticket request
 - `frontend/src/lib/supabase.ts`
@@ -125,6 +126,16 @@ Before fixing a bug, check `docs/project-docs/BUG_TRACKER.md` to avoid duplicate
 - Igris changes:
   - Start in `frontend/src/components/views/IgrisView.tsx`, `frontend/src/pages/ChatPage.tsx`, `backend/.../web/IgrisController.java`, and `backend/.../service/IgrisService.java`
 
+## Phase 1 Features (Completed)
+
+All six Phase 1 chat quality-of-life features are fully implemented:
+1. **Reactions** — emoji toggle on messages, real-time broadcast, pill display
+2. **Mentions** — `@username` autocomplete, highlight, mention notifications
+3. **Pinned messages** — pin/unpin by owner/admin, `PinnedMessageBanner`, real-time `PIN_CHANGED` event
+4. **Room mute** — per-room mute toggle in header, muted rooms skip notifications
+5. **Draft persistence** — per-room drafts in `localStorage`, draft indicator in sidebar
+6. **Message search v1** — ILIKE search within room via `SearchModal` (triggered by search icon in room header)
+
 ## Friendship State Machine
 
 States returned by `FriendService.friendshipState()` and present in `Profile.friendshipState`:
@@ -136,7 +147,14 @@ States returned by `FriendService.friendshipState()` and present in `Profile.fri
 - `blocked_by_them` — they blocked current user
 - `self` — same user
 
-`friendships.status` is a TEXT column with a CHECK constraint (not a PG enum). Adding new states requires a Flyway migration to ALTER the constraint. Current highest migration: **V11** (`friendship blocking`). Next is **V12**.
+`friendships.status` is a TEXT column with a CHECK constraint (not a PG enum). Adding new states requires a Flyway migration to ALTER the constraint. Current highest migration: **V16** (`daily_message_digest`). Next is **V17**.
+
+## Flyway Safety Rule
+
+- Never edit, rename, replace, or reuse an existing Flyway migration version after it has been committed or deployed.
+- New schema work must always use the next unused version number in `backend/src/main/resources/db/migration/`.
+- Before deploy, scan the migration folder for duplicate version prefixes like two `V14__...` files.
+- If production already ran a migration, preserve that file exactly and add a new corrective migration instead of mutating history.
 
 ## Key API Endpoints (Friends / Rooms)
 
@@ -149,6 +167,12 @@ POST   /api/friends/{id}/block         — block
 DELETE /api/friends/{id}/block         — unblock
 POST   /api/rooms/{id}/read            — mark DM read (updates last_read_at in room_members)
 GET    /api/rooms/{id}/messages?before=&limit=  — paginated messages
+GET    /api/rooms/{id}/messages/search?q=&limit= — full-text search within room (ILIKE)
+PATCH  /api/rooms/{id}/mute            — toggle mute for calling user
+POST   /api/messages/{id}/reactions    — toggle emoji reaction (body: {emoji})
+GET    /api/rooms/{id}/pins            — list pinned messages
+POST   /api/rooms/{id}/pins            — pin a message (body: {messageId}); owner/admin only
+DELETE /api/rooms/{id}/pins/{messageId} — unpin a message; owner/admin only
 ```
 
 ## Real-time Events (WsMessagePayload)

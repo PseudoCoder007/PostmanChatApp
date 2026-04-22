@@ -1,6 +1,7 @@
 package com.postmanchat.web.dto;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record MessageDto(
@@ -13,6 +14,7 @@ public record MessageDto(
         AttachmentDto attachment,
         Instant createdAt,
         Instant editedAt,
-        UUID replyTo
+        UUID replyTo,
+        List<ReactionCount> reactions
 ) {
 }

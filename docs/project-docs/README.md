@@ -7,13 +7,13 @@ This folder is the canonical documentation hub for repo navigation and agent wor
 Before planning or executing work in this repo, read these files in order:
 
 1. `docs/project-docs/README.md`
-2. `docs/project-docs/AGENTS.md`
+2. `docs/project-docs/claude.md`
 3. `docs/project-docs/CLAUDE_DEV_PROTOCOL.md`
 4. `docs/project-docs/ARCHITECTURE_MAP.md`
 
 ## What Lives Here
 
-- `AGENTS.md`: fast-entry repo map
+- `claude.md`: fast-entry repo map
 - `CLAUDE_DEV_PROTOCOL.md`: working rules for high-signal implementation
 - `ARCHITECTURE_MAP.md`: deeper subsystem map, route map, and backend API inventory
 - `BUG_TRACKER.md`: professional bug log — every reported issue, root cause, fix, and affected files

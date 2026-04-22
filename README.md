@@ -4,7 +4,23 @@ PostmanChat is a full-stack realtime messaging platform built with React, Spring
 
 ## Version 2
 
-`v2.1.0` is the current release.
+`v2.2.0` is the current release.
+
+### v2.2.0 — Chat Engagement & Collaboration Update
+
+**Phase 1 Features - All 6 Implemented:**
+- Reactions: Users can react to messages with 6 quick emoji reactions (👍 ❤️ 😂 😮 😢 🔥); reactions are togglable and update in real-time across all users
+- Mentions & Notifications: Tag users with @mention syntax for autocomplete; mentioned users receive notifications; @mentions bypass room mute
+- Pinned Messages: Admin/owner can pin up to 5 important messages to room header; collapsible pinned banner with modal to view all pins
+- Room Mute: Users can mute rooms to stop notifications (except @mentions which bypass mute); preference persists across sessions
+- Draft Persistence: Auto-save message drafts per room in browser localStorage; drafts restore when switching back to room; cleared after send
+- Message Search v1: Search within room messages (2+ character minimum, capped at 50 results); uses ILIKE for case-insensitive search with 30-second result caching
+
+**Plus 31 critical bug fixes** including Flyway V10 checksum fix, browser notifications fix, message pagination fix, and mobile sign-out accessibility
+
+Version markers:
+- Frontend package: `2.2.0`
+- Backend artifact: `2.2.0-SNAPSHOT`
 
 ### v2.1.0 — Chat UX & Safety Update
 
@@ -63,7 +79,7 @@ PostWebAppforMessaging/
 |-- docs/
 |-- frontend/
 |-- deploy/
-|-- AGENTS.md
+|-- claude.md
 |-- docker-compose.yml
 |-- Dockerfile
 `-- README.md
@@ -71,9 +87,9 @@ PostWebAppforMessaging/
 
 ## Navigation
 
-- [AGENTS.md](AGENTS.md): root agent entrypoint that forwards to the docs hub
+- [claude.md](claude.md): root agent entrypoint that forwards to the docs hub
 - [docs/project-docs/README.md](docs/project-docs/README.md): canonical documentation hub and required read order
-- [docs/project-docs/AGENTS.md](docs/project-docs/AGENTS.md): fast-entry repo map for Claude, Codex, and other agents
+- [docs/project-docs/claude.md](docs/project-docs/claude.md): fast-entry repo map for Claude, Codex, and other agents
 - [docs/project-docs/CLAUDE_DEV_PROTOCOL.md](docs/project-docs/CLAUDE_DEV_PROTOCOL.md): concise planning and implementation rules
 - [docs/project-docs/ARCHITECTURE_MAP.md](docs/project-docs/ARCHITECTURE_MAP.md): deeper subsystem map with routes, API inventory, and ownership notes
 
@@ -86,7 +102,7 @@ For upcoming product additions, start with `docs/project-docs/` to understand th
 Agents working in this repo should read the docs in this order before planning or executing:
 
 1. `docs/project-docs/README.md`
-2. `docs/project-docs/AGENTS.md`
+2. `docs/project-docs/claude.md`
 3. `docs/project-docs/CLAUDE_DEV_PROTOCOL.md`
 4. `docs/project-docs/ARCHITECTURE_MAP.md`
 

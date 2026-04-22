@@ -220,6 +220,10 @@ export default function LoginPage() {
 
       <div className="auth-form-side">
         <div className="auth-card">
+          <div className="auth-mobile-brand">
+            <div className="auth-brand__icon" style={{ width: 36, height: 36, fontSize: 16 }}>P</div>
+            <span className="auth-brand__name" style={{ fontSize: 17 }}>Postman<span>Chat</span></span>
+          </div>
           <div className="auth-card__header">
             <div className="auth-card__icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>

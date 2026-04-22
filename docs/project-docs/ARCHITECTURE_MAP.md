@@ -9,7 +9,7 @@ This repo is organized around one core user experience: an authenticated chat wo
 This file is part of the canonical docs hub. Before planning or executing work, read:
 
 1. `docs/project-docs/README.md`
-2. `docs/project-docs/AGENTS.md`
+2. `docs/project-docs/claude.md`
 3. `docs/project-docs/CLAUDE_DEV_PROTOCOL.md`
 4. `docs/project-docs/ARCHITECTURE_MAP.md`
 

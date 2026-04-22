@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Brain, MessageCircle, Users, Target, Trophy, User, Settings2 } from 'lucide-react';
+import { Brain, MessageCircle, Users, Target, Trophy, User, Settings2, Bell } from 'lucide-react';
 import { useStompRoom } from '@/hooks/useStompRoom';
 import { apiFetch, apiFetchForm, resolveAttachmentUrl } from '@/lib/api';
 import { getUserFriendlyErrorMessage } from '@/lib/errorMessages';
@@ -11,7 +11,8 @@ import { useTutorial } from '@/hooks/useTutorial';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { LevelUpCelebration } from '@/components/LevelUpCelebration';
-import type { Attachment, FeedbackRequest, FeedbackResponse, FriendRequest, IgrisChatResponse, IgrisChatTurn, IgrisHistoryItem, LeaderboardEntry, Message, NotificationItem, Profile, Quest, Room, RoomJoinRequest, RoomReadEvent, RoomVisibility, TypingEvent, WsMessagePayload } from '@/types/chat';
+import type { Attachment, FeedbackRequest, FeedbackResponse, FriendRequest, IgrisChatResponse, IgrisChatTurn, IgrisHistoryItem, LeaderboardEntry, Message, NotificationItem, PinnedMessage, Profile, Quest, Room, RoomJoinRequest, RoomReadEvent, RoomVisibility, TypingEvent, WsMessagePayload } from '@/types/chat';
+import SearchModal from '@/components/SearchModal';
 import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
 import ChatView from '@/components/views/ChatView';
@@ -23,9 +24,10 @@ import LevelsView from '@/components/views/LevelsView';
 import ProfileView from '@/components/views/ProfileView';
 import FeedbackView from '@/components/views/FeedbackView';
 import SettingsView from '@/components/views/SettingsView';
+import NotificationsView from '@/components/views/NotificationsView';
 import ProfileModal from '@/components/ProfileModal';
 
-type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile' | 'feedback' | 'settings';
+type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile' | 'feedback' | 'settings' | 'notifications';
 type IgrisMessage = { id: string; role: 'user' | 'assistant'; content: string };
 type FocusMission = { id: string; title: string; description: string; reward: string; lane: string };
 
@@ -61,6 +63,7 @@ export default function ChatPage() {
   const previousUnreadCountRef = useRef(0);
   const [levelUpCelebration, setLevelUpCelebration] = useState<{ oldLevel: number; newLevel: number; title: string } | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>('chat');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeRoomId, setActiveRoomId] = useState<string>();
   const [draft, setDraft] = useState('');
@@ -79,6 +82,8 @@ export default function ChatPage() {
   const [igrisDrawerOpen, setIgrisDrawerOpen] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState<FeedbackRequest>({ category: 'feedback', subject: '', message: '', contactEmail: '' });
   const [viewingProfile, setViewingProfile] = useState<Profile | null>(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
   const [focusRefreshTick, setFocusRefreshTick] = useState(() => Math.floor(Date.now() / (10 * 60 * 1000)));
   const [igrisMessages, setIgrisMessages] = useState<IgrisMessage[]>([
     { id: 'intro', role: 'assistant', content: 'Igris online. I can be your funny low-key therapist friend, boredom killer, comeback coach, or chaos planner. Tell me the lore.' },
@@ -137,9 +142,21 @@ export default function ChatPage() {
   });
   const { data: messages = [], isLoading: messagesLoading, refetch: refetchMessages } = useQuery({
     queryKey: ['messages', activeRoomId],
-    queryFn: async () => json<Message[]>(await apiFetch(`/api/rooms/${activeRoomId}/messages?limit=80`)),
+    queryFn: async () => {
+      const msgs = await json<Message[]>(await apiFetch(`/api/rooms/${activeRoomId}/messages?limit=20`));
+      setHasMoreMessages(msgs.length === 20);
+      return msgs;
+    },
     enabled: !!me && !!activeRoomId,
     staleTime: 15000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const { data: pins = [] } = useQuery({
+    queryKey: ['pins', activeRoomId],
+    queryFn: async () => json<PinnedMessage[]>(await apiFetch(`/api/rooms/${activeRoomId}/pins`)),
+    enabled: !!me && !!activeRoomId,
+    staleTime: 30000,
     refetchOnWindowFocus: false,
     retry: false,
   });
@@ -161,6 +178,10 @@ export default function ChatPage() {
     if (activeRoomId && allRooms.some((room) => room.id === activeRoomId)) return;
     setActiveRoomId(allRooms[0]?.id);
   }, [activeRoomId, allRooms]);
+
+  useEffect(() => {
+    setHasMoreMessages(true);
+  }, [activeRoomId]);
 
   useEffect(() => {
     if (!me) return;
@@ -185,6 +206,12 @@ export default function ChatPage() {
     setRoomTyping(null);
     if (typingIdleTimeoutRef.current) window.clearTimeout(typingIdleTimeoutRef.current);
     if (typingClearTimeoutRef.current) window.clearTimeout(typingClearTimeoutRef.current);
+  }, [activeRoomId]);
+
+  useEffect(() => {
+    if (!activeRoomId) { setDraft(''); return; }
+    const saved = localStorage.getItem(`postmanchat.draft.${activeRoomId}`) ?? '';
+    setDraft(saved);
   }, [activeRoomId]);
 
   // Mark DM room as read when user opens it
@@ -217,7 +244,34 @@ export default function ChatPage() {
     if (Notification.permission === 'granted') new Notification(latest.title, { body: latest.body });
   }, [notifications]);
 
+  // Auto-request browser notification permission after user settles in
+  useEffect(() => {
+    if (!me || !('Notification' in window) || Notification.permission !== 'default') return;
+    const t = window.setTimeout(() => { void Notification.requestPermission(); }, 4000);
+    return () => window.clearTimeout(t);
+  }, [me]);
+
   const orderedMessages = useMemo(() => [...messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [messages]);
+
+  async function loadMoreMessages() {
+    if (!activeRoomId || loadingMoreMessages || !orderedMessages.length) return;
+    setLoadingMoreMessages(true);
+    try {
+      const oldest = orderedMessages[0].createdAt;
+      const older = await json<Message[]>(await apiFetch(
+        `/api/rooms/${activeRoomId}/messages?limit=20&before=${encodeURIComponent(oldest)}`
+      ));
+      qc.setQueryData<Message[]>(['messages', activeRoomId], old => [...older, ...(old ?? [])]);
+      setHasMoreMessages(older.length === 20);
+    } finally {
+      setLoadingMoreMessages(false);
+    }
+  }
+  const mentionCandidates = useMemo(() => {
+    if (!activeRoom) return [];
+    if (activeRoom.type === 'direct' && activeRoom.directPeer) return [activeRoom.directPeer];
+    return friends.map(f => f.profile);
+  }, [activeRoom, friends]);
   const visibleRooms = useMemo(() => {
     const q = roomSearch.trim().toLowerCase();
     if (!q) return allRooms;
@@ -248,13 +302,13 @@ export default function ChatPage() {
 
   useEffect(() => {
     const count = unread.length;
-    if (previousUnreadCountRef.current > 0 && count > previousUnreadCountRef.current && soundEnabled) playUiTone('alert');
+    if (count > previousUnreadCountRef.current && soundEnabled) playUiTone('alert');
     previousUnreadCountRef.current = count;
   }, [soundEnabled, unread.length]);
 
   useEffect(() => {
     const latest = orderedMessages[orderedMessages.length - 1];
-    if (previousMessageCountRef.current > 0 && orderedMessages.length > previousMessageCountRef.current && latest?.senderId !== me?.id && soundEnabled) {
+    if (orderedMessages.length > previousMessageCountRef.current && latest?.senderId !== me?.id && soundEnabled) {
       playUiTone('message');
     }
     previousMessageCountRef.current = orderedMessages.length;
@@ -321,16 +375,31 @@ export default function ChatPage() {
       );
       return;
     }
+    if (payload.type === 'PIN_CHANGED') {
+      void qc.invalidateQueries({ queryKey: ['pins', activeRoomId] });
+      return;
+    }
+    // Real-time browser notification for new messages when page is hidden
+    if (payload.type === 'MESSAGE_CREATED' && payload.message && payload.message.senderId !== me?.id && document.hidden) {
+      const msgRoom = allRooms.find(r => r.id === payload.message!.roomId);
+      if (!msgRoom?.muted && 'Notification' in window && Notification.permission === 'granted') {
+        const sender = msgRoom?.directPeer?.displayName ?? msgRoom?.name ?? 'Someone';
+        new Notification(`${sender} sent a message`, {
+          body: payload.message.content?.slice(0, 100) || 'Sent an attachment',
+        });
+      }
+    }
+
     if (!payload.message || payload.message.roomId !== activeRoomId) return;
     if (roomTyping && payload.message.senderId === roomTyping.userId) {
       setRoomTyping(null);
     }
     qc.setQueryData<Message[]>(['messages', activeRoomId], (old) => {
       const list = old ?? [];
-      if (payload.type === 'MESSAGE_DELETED') return list.filter((message) => message.id !== payload.message.id);
-      if (payload.type === 'MESSAGE_UPDATED') return list.map((message) => (message.id === payload.message.id ? payload.message : message));
-      if (list.some((message) => message.id === payload.message.id)) return list;
-      return [...list, payload.message];
+      if (payload.type === 'MESSAGE_DELETED') return list.filter((message) => message.id !== payload.message!.id);
+      if (payload.type === 'MESSAGE_UPDATED' || payload.type === 'REACTION_UPDATE') return list.map((message) => (message.id === payload.message!.id ? payload.message! : message));
+      if (list.some((message) => message.id === payload.message!.id)) return list;
+      return [...list, payload.message!];
     });
   }
 
@@ -422,6 +491,37 @@ export default function ChatPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['room-requests'] }); toast.success('Request rejected'); },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
+  const toggleReaction = useMutation({
+    mutationFn: async ({ messageId, emoji }: { messageId: string; emoji: string }) =>
+      json<Message>(await apiFetch(`/api/messages/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji }) })),
+    onSuccess: (_data, variables) => {
+      qc.setQueryData<Message[]>(['messages', activeRoomId], old =>
+        old ? old.map(m => m.id === variables.messageId ? _data : m) : old
+      );
+    },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const toggleMuteRoom = useMutation({
+    mutationFn: async ({ roomId }: { roomId: string }) => json<Room>(await apiFetch(`/api/rooms/${roomId}/mute`, { method: 'PATCH' })),
+    onSuccess: async (_data, variables) => {
+      qc.setQueryData<Room[]>(['rooms'], old => old ? old.map(r => r.id === variables.roomId ? { ...r, muted: _data.muted } : r) : old);
+      toast.success(_data.muted ? 'Room muted' : 'Room unmuted');
+    },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+
+  const pinMessage = useMutation({
+    mutationFn: async ({ roomId, messageId }: { roomId: string; messageId: string }) =>
+      json<PinnedMessage>(await apiFetch(`/api/rooms/${roomId}/pins`, { method: 'POST', body: JSON.stringify({ messageId }) })),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['pins', activeRoomId] }); toast.success('Message pinned'); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
+  const unpinMessage = useMutation({
+    mutationFn: async ({ roomId, messageId }: { roomId: string; messageId: string }) =>
+      apiFetch(`/api/rooms/${roomId}/pins/${messageId}`, { method: 'DELETE' }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['pins', activeRoomId] }); toast.success('Message unpinned'); },
+    onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
+  });
 
   async function uploadAttachmentToBackend(file: File): Promise<Attachment> {
     const form = new FormData();
@@ -435,7 +535,10 @@ export default function ChatPage() {
   const sendMessage = useMutation({
     mutationFn: async ({ roomId, content, attachmentId }: { roomId: string; content: string; attachmentId: string | null }) =>
       json<Message>(await apiFetch(`/api/rooms/${roomId}/messages`, { method: 'POST', body: JSON.stringify({ content, replyTo: null, attachmentId }) })),
-    onSuccess: async () => { playUiTone('send'); setDraft(''); setSelectedFile(null); setUploadWarning(null); void refetchMessages(); await refreshCore(); },
+    onSuccess: async (_data, variables) => {
+      localStorage.removeItem(`postmanchat.draft.${variables.roomId}`);
+      playUiTone('send'); setDraft(''); setSelectedFile(null); setUploadWarning(null); void refetchMessages(); await refreshCore();
+    },
     onError: (error: Error) => toast.error(getUserFriendlyErrorMessage(error)),
   });
   const markNotificationRead = useMutation({
@@ -564,6 +667,10 @@ export default function ChatPage() {
 
   function handleDraftChange(nextDraft: string) {
     setDraft(nextDraft);
+    if (activeRoomId) {
+      if (nextDraft) localStorage.setItem(`postmanchat.draft.${activeRoomId}`, nextDraft);
+      else localStorage.removeItem(`postmanchat.draft.${activeRoomId}`);
+    }
     if (!activeRoomId || activeRoom?.type !== 'direct') return;
 
     if (typingIdleTimeoutRef.current) window.clearTimeout(typingIdleTimeoutRef.current);
@@ -606,6 +713,7 @@ export default function ChatPage() {
         onLaunchMission={() => generateQuest.mutate()}
         launchPending={generateQuest.isPending}
         unreadCount={unread.length}
+        unreadNotifCount={notifications.filter(n => !n.read).length}
         isDark={isDark}
         toggleTheme={toggleTheme}
         mobileOpen={sidebarOpen}
@@ -623,7 +731,7 @@ export default function ChatPage() {
           unreadCount={unread.length}
           isDark={isDark}
           toggleTheme={toggleTheme}
-          onNotificationsClick={() => setActiveView('board')}
+          onNotificationsClick={() => setActiveView('notifications')}
           onSettingsClick={() => setActiveView('settings')}
           onAvatarClick={() => setActiveView('profile')}
           onMenuClick={() => setSidebarOpen(true)}
@@ -677,6 +785,17 @@ export default function ChatPage() {
               }}
               onBlock={(userId) => blockUser.mutate({ targetUserId: userId })}
               onUnblock={(userId) => unblockUser.mutate({ targetUserId: userId })}
+              onToggleMute={(roomId) => toggleMuteRoom.mutate({ roomId })}
+              mutePending={toggleMuteRoom.isPending}
+              onToggleReaction={(messageId, emoji) => toggleReaction.mutate({ messageId, emoji })}
+              mentionCandidates={mentionCandidates}
+              pins={pins}
+              onPinMessage={(roomId, messageId) => pinMessage.mutate({ roomId, messageId })}
+              onUnpinMessage={(roomId, messageId) => unpinMessage.mutate({ roomId, messageId })}
+              onSearchOpen={() => setSearchOpen(true)}
+              onLoadMore={() => void loadMoreMessages()}
+              hasMoreMessages={hasMoreMessages}
+              loadingMoreMessages={loadingMoreMessages}
             />
           )}
 
@@ -731,10 +850,15 @@ export default function ChatPage() {
             <BoardView
               leaderboard={leaderboard}
               me={me}
+              initials={initials}
+            />
+          )}
+
+          {activeView === 'notifications' && (
+            <NotificationsView
               notifications={notifications}
               onMarkRead={(id) => markNotificationRead.mutate({ notificationId: id })}
               formatTime={formatTime}
-              initials={initials}
             />
           )}
 
@@ -843,6 +967,14 @@ export default function ChatPage() {
       </aside>
 
       <TutorialOverlay />
+      {searchOpen && activeRoom && (
+        <SearchModal
+          roomId={activeRoom.id}
+          roomName={activeRoom.type === 'direct' && activeRoom.directPeer ? activeRoom.directPeer.displayName : activeRoom.name}
+          onClose={() => setSearchOpen(false)}
+          formatTime={formatTime}
+        />
+      )}
       {viewingProfile && (
         <ProfileModal
           profile={viewingProfile}
@@ -864,14 +996,14 @@ export default function ChatPage() {
           { key: 'chat' as ViewKey, label: 'Chat', icon: <MessageCircle size={20} /> },
           { key: 'people' as ViewKey, label: 'People', icon: <Users size={20} /> },
           { key: 'quests' as ViewKey, label: 'Quests', icon: <Target size={20} /> },
-          { key: 'board' as ViewKey, label: 'Board', icon: <Trophy size={20} /> },
+          { key: 'notifications' as ViewKey, label: 'Alerts', icon: <Bell size={20} /> },
           { key: 'profile' as ViewKey, label: 'Profile', icon: <User size={20} /> },
-          { key: 'settings' as ViewKey, label: 'Menu', icon: <Settings2 size={20} /> },
+          { key: 'settings' as ViewKey, label: 'Settings', icon: <Settings2 size={20} /> },
         ].map(item => (
           <button
             key={item.key}
-            className={`pm-mobile-nav__btn${activeView === item.key ? ' active' : ''}`}
-            onClick={() => item.key === 'settings' ? setSidebarOpen(true) : setActiveView(item.key)}
+            className={`pm-mobile-nav__btn${activeView === item.key ? ' active' : ''}${item.key === 'notifications' && unread.length > 0 ? ' pm-mobile-nav__btn--badge' : ''}`}
+            onClick={() => setActiveView(item.key)}
           >
             {item.icon}
             <span>{item.label}</span>
@@ -1022,21 +1154,36 @@ function formatCountdown(ms: number) {
 
 function playUiTone(kind: 'send' | 'message' | 'alert' | 'success') {
   if (typeof window === 'undefined' || !('AudioContext' in window)) return;
-  const audioContext = new window.AudioContext();
-  const oscillator = audioContext.createOscillator();
-  const gain = audioContext.createGain();
-  const settings = { send: { frequency: 680, duration: 0.08, type: 'triangle' as OscillatorType }, message: { frequency: 520, duration: 0.12, type: 'sine' as OscillatorType }, alert: { frequency: 300, duration: 0.18, type: 'square' as OscillatorType }, success: { frequency: 840, duration: 0.15, type: 'triangle' as OscillatorType } }[kind];
-  oscillator.type = settings.type;
-  oscillator.frequency.value = settings.frequency;
-  gain.gain.value = 0.0001;
-  oscillator.connect(gain);
-  gain.connect(audioContext.destination);
-  const now = audioContext.currentTime;
-  gain.gain.exponentialRampToValueAtTime(0.05, now + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + settings.duration);
-  oscillator.start(now);
-  oscillator.stop(now + settings.duration);
-  oscillator.onended = () => { void audioContext.close(); };
+  try {
+    const ctx = new window.AudioContext();
+    const now = ctx.currentTime;
+    const configs = {
+      send:    { freq: 700,  freq2: 900,  dur: 0.10, type: 'triangle' as OscillatorType, peak: 0.18 },
+      message: { freq: 523,  freq2: 784,  dur: 0.18, type: 'sine'     as OscillatorType, peak: 0.22 },
+      alert:   { freq: 440,  freq2: 587,  dur: 0.22, type: 'triangle' as OscillatorType, peak: 0.20 },
+      success: { freq: 880,  freq2: 1047, dur: 0.20, type: 'triangle' as OscillatorType, peak: 0.20 },
+    }[kind];
+
+    function makeOscillator(frequency: number, peakGain: number) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = configs.type;
+      osc.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + configs.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + configs.dur + 0.05);
+      return osc;
+    }
+
+    const osc1 = makeOscillator(configs.freq, configs.peak);
+    const osc2 = makeOscillator(configs.freq2, configs.peak * 0.4);
+    osc1.onended = () => { void ctx.close(); };
+    void osc2;
+  } catch { /* ignore AudioContext errors */ }
 }
 
 function initials(value: string) {

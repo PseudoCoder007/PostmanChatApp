@@ -6,7 +6,10 @@ import com.postmanchat.domain.Room;
 import com.postmanchat.web.dto.AttachmentDto;
 import com.postmanchat.web.dto.MessageDto;
 import com.postmanchat.web.dto.ProfileDto;
+import com.postmanchat.web.dto.ReactionCount;
 import com.postmanchat.web.dto.RoomDto;
+
+import java.util.List;
 
 public final class DtoMapper {
 
@@ -36,7 +39,7 @@ public final class DtoMapper {
         );
     }
 
-    public static RoomDto toRoomDto(Room r, ProfileDto directPeer, boolean member, String currentUserRole, long memberCount, java.time.Instant peerLastReadAt) {
+    public static RoomDto toRoomDto(Room r, ProfileDto directPeer, boolean member, String currentUserRole, long memberCount, java.time.Instant peerLastReadAt, boolean muted) {
         return new RoomDto(
                 r.getId(),
                 r.getName(),
@@ -48,11 +51,12 @@ public final class DtoMapper {
                 member,
                 currentUserRole,
                 memberCount,
-                peerLastReadAt
+                peerLastReadAt,
+                muted
         );
     }
 
-    public static MessageDto toAttachmentMessageDto(Message m, String senderDisplayName, String senderUsername, AttachmentDto attachment) {
+    public static MessageDto toAttachmentMessageDto(Message m, String senderDisplayName, String senderUsername, AttachmentDto attachment, List<ReactionCount> reactions) {
         return new MessageDto(
                 m.getId(),
                 m.getRoomId(),
@@ -63,7 +67,8 @@ public final class DtoMapper {
                 attachment,
                 m.getCreatedAt(),
                 m.getEditedAt(),
-                m.getReplyTo()
+                m.getReplyTo(),
+                reactions == null ? List.of() : reactions
         );
     }
 }

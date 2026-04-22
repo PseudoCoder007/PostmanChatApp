@@ -1,11 +1,11 @@
-# AGENTS.md
+# claude.md
 
 Read `docs/project-docs/README.md` first.
 
 Canonical agent docs now live in one folder:
 
 1. `docs/project-docs/README.md`
-2. `docs/project-docs/AGENTS.md`
+2. `docs/project-docs/claude.md`
 3. `docs/project-docs/CLAUDE_DEV_PROTOCOL.md`
 4. `docs/project-docs/ARCHITECTURE_MAP.md`
 

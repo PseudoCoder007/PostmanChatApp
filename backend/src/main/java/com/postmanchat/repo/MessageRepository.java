@@ -33,4 +33,16 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
             @Param("before") Instant before,
             Pageable pageable
     );
+
+    @Query("""
+            SELECT m FROM Message m
+            WHERE m.roomId = :roomId
+            AND lower(m.content) LIKE lower(concat('%', :q, '%'))
+            ORDER BY m.createdAt DESC
+            """)
+    List<Message> searchInRoom(
+            @Param("roomId") UUID roomId,
+            @Param("q") String q,
+            Pageable pageable
+    );
 }

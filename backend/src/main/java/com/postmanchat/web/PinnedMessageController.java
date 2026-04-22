@@ -1,0 +1,45 @@
+package com.postmanchat.web;
+
+import com.postmanchat.service.PinService;
+import com.postmanchat.web.dto.PinnedMessageDto;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/rooms")
+public class PinnedMessageController {
+
+    private final PinService pinService;
+
+    public PinnedMessageController(PinService pinService) {
+        this.pinService = pinService;
+    }
+
+    @GetMapping("/{roomId}/pins")
+    public List<PinnedMessageDto> listPins(@PathVariable UUID roomId) {
+        return pinService.listPins(roomId);
+    }
+
+    @PostMapping("/{roomId}/pins")
+    public PinnedMessageDto pinMessage(@PathVariable UUID roomId, @RequestBody Map<String, String> body) {
+        UUID messageId = UUID.fromString(body.get("messageId"));
+        return pinService.pinMessage(roomId, messageId);
+    }
+
+    @DeleteMapping("/{roomId}/pins/{messageId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void unpinMessage(@PathVariable UUID roomId, @PathVariable UUID messageId) {
+        pinService.unpinMessage(roomId, messageId);
+    }
+}

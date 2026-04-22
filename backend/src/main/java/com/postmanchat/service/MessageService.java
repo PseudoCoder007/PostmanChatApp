@@ -3,14 +3,17 @@ package com.postmanchat.service;
 import com.postmanchat.config.PostmanChatProperties;
 import com.postmanchat.domain.Attachment;
 import com.postmanchat.domain.Message;
+import com.postmanchat.domain.MessageReaction;
 import com.postmanchat.domain.Profile;
 import com.postmanchat.domain.Room;
 import com.postmanchat.domain.RoomType;
+import com.postmanchat.repo.MessageReactionRepository;
 import com.postmanchat.repo.MessageRepository;
 import com.postmanchat.repo.ProfileRepository;
 import com.postmanchat.web.Authz;
 import com.postmanchat.web.dto.MessageDto;
 import com.postmanchat.web.dto.PatchMessageRequest;
+import com.postmanchat.web.dto.ReactionCount;
 import com.postmanchat.web.dto.SendMessageRequest;
 import com.postmanchat.web.dto.TypingEventDto;
 import com.postmanchat.web.dto.WsMessagePayload;
@@ -22,10 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -45,6 +51,7 @@ public class MessageService {
     private final com.postmanchat.repo.RoomMemberRepository roomMemberRepository;
     private final QuestService questService;
     private final FriendService friendService;
+    private final MessageReactionRepository reactionRepository;
 
     public MessageService(
             MessageRepository messageRepository,
@@ -57,7 +64,8 @@ public class MessageService {
             NotificationService notificationService,
             com.postmanchat.repo.RoomMemberRepository roomMemberRepository,
             QuestService questService,
-            FriendService friendService
+            FriendService friendService,
+            MessageReactionRepository reactionRepository
     ) {
         this.messageRepository = messageRepository;
         this.profileRepository = profileRepository;
@@ -70,6 +78,19 @@ public class MessageService {
         this.roomMemberRepository = roomMemberRepository;
         this.questService = questService;
         this.friendService = friendService;
+        this.reactionRepository = reactionRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<MessageDto> searchMessages(UUID roomId, String query, int limit) {
+        UUID userId = Authz.requireUserId();
+        roomService.assertMember(roomId, userId);
+        if (query == null || query.isBlank()) return List.of();
+        int capped = Math.max(1, Math.min(limit, 50));
+        List<Message> raw = messageRepository.searchInRoom(roomId, query.trim(), PageRequest.of(0, capped));
+        List<Message> chronological = new java.util.ArrayList<>(raw);
+        Collections.reverse(chronological);
+        return toMessageDtos(chronological);
     }
 
     @Transactional(readOnly = true)
@@ -124,6 +145,7 @@ public class MessageService {
         questService.handleMessageActivity(userId, room, body, attachment);
         MessageDto dto = toMessageDto(saved);
         createNotificationsForInactiveMembers(saved, dto);
+        detectAndNotifyMentions(saved, roomId, userId);
         messagingTemplate.convertAndSend(topic(roomId), new WsMessagePayload("MESSAGE_CREATED", dto));
         return dto;
     }
@@ -160,7 +182,7 @@ public class MessageService {
         String senderDisplayName = sender != null ? sender.getDisplayName() : "Unknown user";
         String senderUsername = sender != null ? sender.getUsername() : "unknown";
         MessageDto tombstone = new MessageDto(
-                messageId, roomId, userId, senderDisplayName, senderUsername, "", null, message.getCreatedAt(), message.getEditedAt(), message.getReplyTo()
+                messageId, roomId, userId, senderDisplayName, senderUsername, "", null, message.getCreatedAt(), message.getEditedAt(), message.getReplyTo(), List.of()
         );
         messagingTemplate.convertAndSend(topic(roomId), new WsMessagePayload("MESSAGE_DELETED", tombstone));
     }
@@ -196,7 +218,31 @@ public class MessageService {
         return "/topic/rooms." + roomId;
     }
 
+    @Transactional
+    public MessageDto toggleReaction(UUID messageId, String emoji) {
+        UUID userId = Authz.requireUserId();
+        Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+        roomService.assertMember(message.getRoomId(), userId);
+        if (emoji == null || emoji.isBlank() || emoji.length() > 32) {
+            throw new IllegalArgumentException("Invalid emoji");
+        }
+        Optional<MessageReaction> existing = reactionRepository.findByMessageIdAndUserIdAndEmoji(messageId, userId, emoji);
+        if (existing.isPresent()) {
+            reactionRepository.delete(existing.get());
+        } else {
+            reactionRepository.save(new MessageReaction(UUID.randomUUID(), messageId, userId, emoji));
+        }
+        MessageDto dto = toMessageDto(message);
+        messagingTemplate.convertAndSend(topic(message.getRoomId()), new WsMessagePayload("REACTION_UPDATE", dto));
+        return dto;
+    }
+
     private List<MessageDto> toMessageDtos(List<Message> messages) {
+        UUID currentUserId = Authz.requireUserId();
+        Set<UUID> msgIds = messages.stream().map(Message::getId).collect(Collectors.toSet());
+        Map<UUID, List<MessageReaction>> reactionsPerMessage = reactionRepository.findByMessageIdIn(msgIds).stream()
+                .collect(Collectors.groupingBy(MessageReaction::getMessageId));
         Set<UUID> senderIds = messages.stream().map(Message::getSenderId).collect(Collectors.toSet());
         Map<UUID, Profile> senders = profileRepository.findAllById(senderIds).stream()
                 .collect(Collectors.toMap(Profile::getId, profile -> profile));
@@ -205,14 +251,30 @@ public class MessageService {
                         message,
                         senders.getOrDefault(message.getSenderId(), fallbackProfile(message.getSenderId())).getDisplayName(),
                         senders.getOrDefault(message.getSenderId(), fallbackProfile(message.getSenderId())).getUsername(),
-                        resolveAttachmentDto(message.getId())
+                        resolveAttachmentDto(message.getId()),
+                        buildReactionCounts(reactionsPerMessage.getOrDefault(message.getId(), List.of()), currentUserId)
                 ))
                 .toList();
     }
 
     private MessageDto toMessageDto(Message message) {
+        UUID currentUserId = Authz.requireUserId();
         Profile sender = profileRepository.findById(message.getSenderId()).orElse(fallbackProfile(message.getSenderId()));
-        return DtoMapper.toAttachmentMessageDto(message, sender.getDisplayName(), sender.getUsername(), resolveAttachmentDto(message.getId()));
+        List<MessageReaction> reactions = reactionRepository.findByMessageId(message.getId());
+        return DtoMapper.toAttachmentMessageDto(message, sender.getDisplayName(), sender.getUsername(),
+                resolveAttachmentDto(message.getId()), buildReactionCounts(reactions, currentUserId));
+    }
+
+    private List<ReactionCount> buildReactionCounts(List<MessageReaction> reactions, UUID currentUserId) {
+        Map<String, Long> counts = reactions.stream()
+                .collect(Collectors.groupingBy(MessageReaction::getEmoji, Collectors.counting()));
+        Set<String> mine = reactions.stream()
+                .filter(r -> r.getUserId().equals(currentUserId))
+                .map(MessageReaction::getEmoji)
+                .collect(Collectors.toSet());
+        return counts.entrySet().stream()
+                .map(e -> new ReactionCount(e.getKey(), e.getValue(), mine.contains(e.getKey())))
+                .toList();
     }
 
     private static Profile fallbackProfile(UUID senderId) {
@@ -229,19 +291,49 @@ public class MessageService {
         Profile sender = profileRepository.findById(message.getSenderId()).orElse(null);
         String senderName = sender != null ? sender.getDisplayName() : "Someone";
         roomMemberRepository.findByIdRoomId(message.getRoomId()).stream()
-                .map(member -> member.getId().getUserId())
-                .filter(memberId -> !memberId.equals(message.getSenderId()))
-                .forEach(memberId -> profileRepository.findById(memberId).ifPresent(profile -> {
-                    if (profile.getLastActiveAt() == null || profile.getLastActiveAt().isBefore(Instant.now().minusSeconds(120))) {
-                        notificationService.notifyUser(
-                                memberId,
-                                "message",
-                                "New message from " + senderName,
-                                dto.content().isBlank() ? "Sent an attachment" : dto.content(),
-                                message.getRoomId(),
-                                message.getId()
-                        );
-                    }
-                }));
+                .filter(member -> !member.getId().getUserId().equals(message.getSenderId()))
+                .filter(member -> !member.isMuted())
+                .forEach(member -> {
+                    UUID memberId = member.getId().getUserId();
+                    profileRepository.findById(memberId).ifPresent(profile -> {
+                        if (profile.getLastActiveAt() == null || profile.getLastActiveAt().isBefore(Instant.now().minusSeconds(120))) {
+                            notificationService.notifyUser(
+                                    memberId,
+                                    "message",
+                                    "New message from " + senderName,
+                                    dto.content().isBlank() ? "Sent an attachment" : dto.content(),
+                                    message.getRoomId(),
+                                    message.getId()
+                            );
+                        }
+                    });
+                });
+    }
+
+    private static final Pattern MENTION_PATTERN = Pattern.compile("@(\\w{1,50})");
+
+    private void detectAndNotifyMentions(Message message, UUID roomId, UUID senderId) {
+        if (message.getContent() == null || message.getContent().isBlank()) return;
+        Matcher matcher = MENTION_PATTERN.matcher(message.getContent());
+        Set<String> seen = new HashSet<>();
+        while (matcher.find()) {
+            String username = matcher.group(1);
+            if (!seen.add(username.toLowerCase())) continue;
+            profileRepository.findByUsernameIgnoreCase(username).ifPresent(profile -> {
+                if (!profile.getId().equals(senderId) &&
+                        roomMemberRepository.existsByIdRoomIdAndIdUserId(roomId, profile.getId())) {
+                    Profile senderProfile = profileRepository.findById(senderId).orElse(null);
+                    String senderName = senderProfile != null ? senderProfile.getDisplayName() : "Someone";
+                    notificationService.notifyUser(
+                            profile.getId(),
+                            "mention",
+                            senderName + " mentioned you",
+                            message.getContent(),
+                            roomId,
+                            message.getId()
+                    );
+                }
+            });
+        }
     }
 }

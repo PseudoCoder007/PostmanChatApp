@@ -13,7 +13,7 @@
 
     <groupId>com.postmanchat</groupId>
     <artifactId>postman-chat-api</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.2.0-SNAPSHOT</version>
     <name>postman-chat-api</name>
     <description>Postman Chat API — Spring Boot + WebSockets</description>
 

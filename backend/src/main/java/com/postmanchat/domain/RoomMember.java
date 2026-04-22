@@ -23,6 +23,9 @@ public class RoomMember {
     @Column(name = "last_read_at")
     private Instant lastReadAt;
 
+    @Column(nullable = false)
+    private boolean muted = false;
+
     protected RoomMember() {
     }
 
@@ -50,5 +53,13 @@ public class RoomMember {
 
     public void setLastReadAt(Instant lastReadAt) {
         this.lastReadAt = lastReadAt;
+    }
+
+    public boolean isMuted() {
+        return muted;
+    }
+
+    public void setMuted(boolean muted) {
+        this.muted = muted;
     }
 }

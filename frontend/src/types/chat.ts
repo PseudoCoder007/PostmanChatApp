@@ -31,6 +31,13 @@ export interface Room {
   currentUserRole: string | null;
   memberCount: number;
   peerLastReadAt: string | null;
+  muted: boolean;
+}
+
+export interface ReactionCount {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
 }
 
 export interface Message {
@@ -44,6 +51,7 @@ export interface Message {
   createdAt: string;
   editedAt: string | null;
   replyTo: string | null;
+  reactions: ReactionCount[];
 }
 
 export interface FriendRequest {
@@ -107,7 +115,7 @@ export interface RoomReadEvent {
 }
 
 export interface WsMessagePayload {
-  type: 'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED' | 'TYPING' | 'ROOM_READ';
+  type: 'MESSAGE_CREATED' | 'MESSAGE_UPDATED' | 'MESSAGE_DELETED' | 'TYPING' | 'ROOM_READ' | 'REACTION_UPDATE' | 'PIN_CHANGED' | 'MENTION';
   message: Message | null;
   typing?: TypingEvent | null;
   roomRead?: RoomReadEvent | null;
@@ -134,6 +142,16 @@ export interface IgrisHistoryItem {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+}
+
+export interface PinnedMessage {
+  id: string;
+  roomId: string;
+  messageId: string;
+  messageContent: string;
+  senderDisplayName: string;
+  pinnedBy: string;
+  pinnedAt: string;
 }
 
 export interface FeedbackRequest {

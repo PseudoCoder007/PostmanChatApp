@@ -1,11 +1,11 @@
 import {
   MessageCircle, Users, Target, Cpu, Trophy,
   TrendingUp, User, MessageSquare, Settings2,
-  LogOut, Mail
+  LogOut, Mail, Bell
 } from 'lucide-react';
 import type { Profile } from '../../types/chat';
 
-type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile' | 'feedback' | 'settings';
+type ViewKey = 'chat' | 'people' | 'quests' | 'igris' | 'board' | 'levels' | 'profile' | 'feedback' | 'settings' | 'notifications';
 
 interface SidebarProps {
   me: Profile | undefined;
@@ -15,6 +15,7 @@ interface SidebarProps {
   onLaunchMission: () => void;
   launchPending: boolean;
   unreadCount: number;
+  unreadNotifCount: number;
   isDark: boolean;
   toggleTheme: () => void;
   mobileOpen?: boolean;
@@ -22,14 +23,15 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'chat',     label: 'Chat',      icon: <MessageCircle size={18} /> },
-  { key: 'people',   label: 'People',    icon: <Users size={18} /> },
-  { key: 'quests',   label: 'Quests',    icon: <Target size={18} /> },
-  { key: 'igris',    label: 'Igris AI',  icon: <Cpu size={18} /> },
-  { key: 'board',    label: 'Board',     icon: <Trophy size={18} /> },
-  { key: 'levels',   label: 'Levels',    icon: <TrendingUp size={18} /> },
-  { key: 'profile',  label: 'Profile',   icon: <User size={18} /> },
-  { key: 'feedback', label: 'Feedback',  icon: <MessageSquare size={18} /> },
+  { key: 'chat',          label: 'Chat',          icon: <MessageCircle size={18} /> },
+  { key: 'people',        label: 'People',        icon: <Users size={18} /> },
+  { key: 'quests',        label: 'Quests',        icon: <Target size={18} /> },
+  { key: 'igris',         label: 'Igris AI',      icon: <Cpu size={18} /> },
+  { key: 'board',         label: 'Board',         icon: <Trophy size={18} /> },
+  { key: 'notifications', label: 'Notifications', icon: <Bell size={18} /> },
+  { key: 'levels',        label: 'Levels',        icon: <TrendingUp size={18} /> },
+  { key: 'profile',       label: 'Profile',       icon: <User size={18} /> },
+  { key: 'feedback',      label: 'Feedback',      icon: <MessageSquare size={18} /> },
 ];
 
 function initials(name: string | null | undefined): string {
@@ -39,7 +41,7 @@ function initials(name: string | null | undefined): string {
 
 export default function Sidebar({
   me, activeView, onNavigate, onSignOut,
-  onLaunchMission, launchPending, unreadCount,
+  onLaunchMission, launchPending, unreadCount, unreadNotifCount,
   mobileOpen = false, onCloseMobile,
 }: SidebarProps) {
   function handleNavigate(view: ViewKey) {
@@ -93,6 +95,9 @@ export default function Sidebar({
             {item.label}
             {item.key === 'chat' && unreadCount > 0 && (
               <span className="pm-nav-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+            )}
+            {item.key === 'notifications' && unreadNotifCount > 0 && (
+              <span className="pm-nav-badge">{unreadNotifCount > 99 ? '99+' : unreadNotifCount}</span>
             )}
           </button>
         ))}

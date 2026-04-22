@@ -275,13 +275,23 @@ public class RoomService {
         }
     }
 
+    @Transactional
+    public RoomDto toggleMute(UUID roomId) {
+        UUID userId = Authz.requireUserId();
+        RoomMember member = roomMemberRepository.findByIdRoomIdAndIdUserId(roomId, userId)
+                .orElseThrow(() -> new org.springframework.security.access.AccessDeniedException("Not a member of this room"));
+        member.setMuted(!member.isMuted());
+        roomMemberRepository.save(member);
+        return toRoomDto(findRoom(roomId), userId);
+    }
+
     private RoomDto toRoomDto(Room room, UUID currentUserId) {
         ProfileDto directPeer = null;
         Instant peerLastReadAt = null;
-        boolean member = roomMemberRepository.existsByIdRoomIdAndIdUserId(room.getId(), currentUserId);
-        String currentUserRole = roomMemberRepository.findByIdRoomIdAndIdUserId(room.getId(), currentUserId)
-                .map(RoomMember::getRole)
-                .orElse(null);
+        Optional<RoomMember> currentMemberOpt = roomMemberRepository.findByIdRoomIdAndIdUserId(room.getId(), currentUserId);
+        boolean member = currentMemberOpt.isPresent();
+        String currentUserRole = currentMemberOpt.map(RoomMember::getRole).orElse(null);
+        boolean muted = currentMemberOpt.map(RoomMember::isMuted).orElse(false);
         long memberCount = roomMemberRepository.countByIdRoomId(room.getId());
         if (room.getType() == RoomType.direct) {
             Optional<RoomMember> peerOpt = roomMemberRepository.findByIdRoomId(room.getId()).stream()
@@ -295,7 +305,7 @@ public class RoomService {
                         .orElse(null);
             }
         }
-        return DtoMapper.toRoomDto(room, directPeer, member, currentUserRole, memberCount, peerLastReadAt);
+        return DtoMapper.toRoomDto(room, directPeer, member, currentUserRole, memberCount, peerLastReadAt, muted);
     }
 
     private static boolean matchesSearch(RoomDto room, String normalized) {

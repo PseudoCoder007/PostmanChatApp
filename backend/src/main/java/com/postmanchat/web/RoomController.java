@@ -11,6 +11,7 @@ import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -74,6 +75,11 @@ public class RoomController {
         return roomService.addMember(roomId, targetUserId);
     }
 
+    @PatchMapping("/{roomId}/mute")
+    public RoomDto toggleMute(@PathVariable UUID roomId) {
+        return roomService.toggleMute(roomId);
+    }
+
     @PostMapping("/{roomId}/read")
     public ResponseEntity<Void> markRoomRead(@PathVariable UUID roomId) {
         roomService.markRoomRead(roomId);
@@ -87,6 +93,15 @@ public class RoomController {
             @RequestParam(name = "limit", defaultValue = "50") int limit
     ) {
         return messageService.listMessages(roomId, before, limit);
+    }
+
+    @GetMapping("/{roomId}/messages/search")
+    public List<MessageDto> searchMessages(
+            @PathVariable UUID roomId,
+            @RequestParam String q,
+            @RequestParam(name = "limit", defaultValue = "20") int limit
+    ) {
+        return messageService.searchMessages(roomId, q, limit);
     }
 
     @PostMapping("/{roomId}/messages")
