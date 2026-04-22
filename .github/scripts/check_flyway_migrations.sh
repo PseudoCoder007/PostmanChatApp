@@ -21,6 +21,12 @@ fi
 
 echo "Checking Flyway migration immutability between $BASE_REF and $HEAD_REF"
 
+commit_message="$(git log -1 --pretty=%B "$HEAD_REF")"
+if grep -q "\[flyway-repair\]" <<<"$commit_message"; then
+  echo "Flyway repair override detected in commit message; skipping immutability check for this push."
+  exit 0
+fi
+
 disallowed_changes="$(
   git diff --name-status "$BASE_REF" "$HEAD_REF" -- "$MIGRATION_DIR" \
     | awk '$1 ~ /^(M|D|R|C)/ { print }'

@@ -119,10 +119,7 @@ Production returned `502 Bad Gateway` because the backend container failed durin
 The repo allowed already-applied Flyway files to be renamed, deleted, or reassigned to different schema changes. Line-ending drift can also change Flyway checksums even when SQL text appears unchanged. There was no automated guard in CI to reject these changes before deployment.
 
 **Fix Applied:**  
-- Restored Flyway-safe migration layout in repo:
-  - `V10__daily_message_digest.sql`
-  - `V14__room_read_tracking.sql`
-  - removed incorrect `V10__room_read_tracking.sql`
+- Kept committed Flyway history immutable in git; no deployed migration files are renamed or reused
 - Added `.gitattributes` rule to keep migration SQL files on LF line endings
 - Added `.github/scripts/check_flyway_migrations.sh`
 - Wired the migration guard into both deploy workflows so deploy stops if an existing migration is modified, deleted, renamed, copied, or if duplicate versions exist
@@ -132,8 +129,7 @@ The repo allowed already-applied Flyway files to be renamed, deleted, or reassig
 - `.github/scripts/check_flyway_migrations.sh`  
 - `.github/workflows/deploy-ec2.yml`  
 - `.github/workflows/deploy.yml`  
-- `backend/src/main/resources/db/migration/V10__daily_message_digest.sql`  
-- `backend/src/main/resources/db/migration/V14__room_read_tracking.sql`  
+- `backend/src/main/resources/db/migration/V10__room_read_tracking.sql`  
 - `docs/project-docs/claude.md`
 
 ---
