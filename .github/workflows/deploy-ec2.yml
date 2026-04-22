@@ -22,6 +22,19 @@ jobs:
         chmod +x .github/scripts/check_flyway_migrations.sh
         ./.github/scripts/check_flyway_migrations.sh "${{ github.event.before }}" "${{ github.sha }}"
 
+    - name: Pre-pull base images on EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        command_timeout: 20m
+        script: |
+          docker pull node:18 || true
+          docker pull maven:3.9.9-eclipse-temurin-21 || true
+          docker pull eclipse-temurin:21-jre || true
+
     - name: Deploy to EC2 via SSH
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -96,4 +109,4 @@ jobs:
 
           sudo systemctl restart nginx
 
-          
+
