@@ -36,13 +36,16 @@ jobs:
           docker system prune -af || true
           docker builder prune -af || true
 
-          # Clone repo if not exists, else pull latest
-          if [ -d "postman-chat" ]; then
-            cd postman-chat && git pull origin main
-          else
+          # Clone repo if not exists, then hard-reset to exact remote state.
+          # git pull alone does not remove files deleted on the remote, which
+          # causes stale Flyway migration files to be baked into the image.
+          if [ ! -d "postman-chat" ]; then
             git clone https://github.com/${{ github.repository }}.git postman-chat
-            cd postman-chat
           fi
+          cd postman-chat
+          git fetch origin
+          git reset --hard origin/main
+          git clean -fd
 
           sudo mkdir -p /etc/postman-chat
           sudo mkdir -p /var/lib/postman-chat/uploads
