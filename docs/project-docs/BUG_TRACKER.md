@@ -2,8 +2,8 @@
 
 **Format version:** 1.0  
 **Last updated:** 2026-04-22  
-**Total bugs logged:** 32  
-**Fixed:** 32 | **Open:** 0 | **Won't Fix:** 0
+**Total bugs logged:** 33  
+**Fixed:** 33 | **Open:** 0 | **Won't Fix:** 0
 
 ---
 
@@ -11,6 +11,7 @@
 
 | ID | Title | Severity | Area | Status |
 |----|-------|----------|------|--------|
+| [BUG-033](#bug-033) | Tutorial overlay blocks entire app on every load — appears as black screen | Critical | UI / Frontend | ✅ Fixed |
 | [BUG-032](#bug-032) | Deploy regression: Flyway migration history can be broken by renamed or edited SQL files | Critical | Backend / DB / CI | ✅ Fixed |
 | [BUG-031](#bug-031) | Flyway V10 checksum mismatch — backend fails to start | Critical | Backend / DB | ✅ Fixed |
 | [BUG-030](#bug-030) | Mobile: sign out button inaccessible without opening sidebar | Medium | Mobile / UX | ✅ Fixed |
@@ -47,6 +48,42 @@
 ---
 
 ## Detailed Entries
+
+---
+
+### BUG-033
+
+**Title:** Tutorial overlay blocks entire app on every load — appears as black screen  
+**Severity:** Critical  
+**Priority:** P0  
+**Status:** ✅ Fixed  
+**Category:** UI / Frontend  
+**Reported:** 2026-04-22  
+**Fixed:** 2026-04-22  
+
+**Description:**  
+Every time the app loaded, users saw a completely black screen instead of the workspace. The page title updated correctly (proving React was running), but the entire viewport appeared pitch black with no visible content.
+
+**Steps to Reproduce:**  
+1. Navigate to `postmanchat.live` while logged in  
+2. Page loads — screen is entirely black  
+3. No sidebar, topbar, or content is visible
+
+**Expected Behavior:** App workspace renders immediately on load.  
+**Actual Behavior:** Solid black screen on every page load.
+
+**Root Cause:**  
+`TutorialProvider` in `useTutorial.tsx` initialised `isCompleted` and `isSkipped` as `false` synchronously, which made `currentStep = TUTORIAL_STEPS[0]` non-null on the very first render — before the `useEffect` had a chance to check `localStorage`. `TutorialOverlay` immediately rendered a `position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.75)` overlay covering the entire viewport. The inner card was `background: #0a0a0a` (near-black) with a subtle border — indistinguishable from the dark app background at a glance, making the screen look completely black. The overlay persisted until `supabase.auth.getSession()` resolved and `localStorage` was read — which could take several hundred milliseconds.
+
+**Fix Applied:**  
+- Added `initialized` state (defaults to `false`) to `TutorialProvider`  
+- `setInitialized(true)` is called at the end of `syncSession()`, after `localStorage` is read  
+- `currentStep` now evaluates to `null` while `initialized` is `false`, so `TutorialOverlay` renders nothing until the session and storage check completes  
+- For users who have already completed/skipped the tutorial, `currentStep` stays `null` permanently (no visible change)  
+- For new users, the tutorial appears only after the session is confirmed, not before
+
+**Files Changed:**  
+- `frontend/src/hooks/useTutorial.tsx`
 
 ---
 
