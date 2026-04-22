@@ -81,6 +81,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isSkipped, setIsSkipped] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const [storageKey, setStorageKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,6 +96,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
         setCurrentStepIndex(0);
         setIsCompleted(true);
         setIsSkipped(true);
+        setInitialized(true);
         return;
       }
 
@@ -115,6 +117,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
         setIsCompleted(false);
         setIsSkipped(false);
       }
+      setInitialized(true);
     };
 
     void syncSession();
@@ -163,7 +166,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const currentStep = !isSkipped && !isCompleted ? TUTORIAL_STEPS[currentStepIndex] : null;
+  const currentStep = initialized && !isSkipped && !isCompleted ? TUTORIAL_STEPS[currentStepIndex] : null;
 
   return (
     <TutorialContext.Provider value={{ currentStepIndex, currentStep, isCompleted, isSkipped, nextStep, skipTutorial, resetTutorial }}>
