@@ -3,7 +3,7 @@
 **Format version:** 1.0  
 **Last updated:** 2026-04-22  
 **Total bugs logged:** 32  
-**Fixed:** 31 | **Open:** 1 | **Won't Fix:** 0
+**Fixed:** 32 | **Open:** 0 | **Won't Fix:** 0
 
 ---
 
@@ -11,7 +11,7 @@
 
 | ID | Title | Severity | Area | Status |
 |----|-------|----------|------|--------|
-| [BUG-032](#bug-032) | Deploy regression: Flyway migration history can be broken by renamed or edited SQL files | Critical | Backend / DB / CI | Open |
+| [BUG-032](#bug-032) | Deploy regression: Flyway migration history can be broken by renamed or edited SQL files | Critical | Backend / DB / CI | ✅ Fixed |
 | [BUG-031](#bug-031) | Flyway V10 checksum mismatch — backend fails to start | Critical | Backend / DB | ✅ Fixed |
 | [BUG-030](#bug-030) | Mobile: sign out button inaccessible without opening sidebar | Medium | Mobile / UX | ✅ Fixed |
 | [BUG-029](#bug-029) | Sound: nearly inaudible; not playing on first notification | Medium | UI / Audio | ✅ Fixed |
@@ -98,10 +98,10 @@ This was caused by violating the Flyway Safety Rule in both `claude.md` and `CLA
 **Title:** Deploy regression: Flyway migration history can be broken by renamed or edited SQL files  
 **Severity:** Critical  
 **Priority:** P0  
-**Status:** Open  
+**Status:** ✅ Fixed  
 **Category:** Backend / DB / CI  
 **Reported:** 2026-04-22  
-**Fixed:** —
+**Fixed:** 2026-04-22
 
 **Description:**  
 Production returned `502 Bad Gateway` because the backend container failed during Flyway validation. The repo state being deployed renamed and renumbered previously applied migrations, so the application never reached a healthy state on port `8080`.
@@ -119,18 +119,20 @@ Production returned `502 Bad Gateway` because the backend container failed durin
 The repo allowed already-applied Flyway files to be renamed, deleted, or reassigned to different schema changes. Line-ending drift can also change Flyway checksums even when SQL text appears unchanged. There was no automated guard in CI to reject these changes before deployment.
 
 **Fix Applied:**  
-- Kept committed Flyway history immutable in git; no deployed migration files are renamed or reused
-- Added `.gitattributes` rule to keep migration SQL files on LF line endings
-- Added `.github/scripts/check_flyway_migrations.sh`
-- Wired the migration guard into both deploy workflows so deploy stops if an existing migration is modified, deleted, renamed, copied, or if duplicate versions exist
+- Added `.gitattributes` rule to keep migration SQL files on LF line endings (prevents checksum drift from line-ending conversion)
+- Added `.github/scripts/check_flyway_migrations.sh` — rejects any push that modifies, deletes, renames, copies, or duplicates an existing Flyway migration; bypassed only by commits prefixed `[flyway-repair]`
+- Wired the guard into both deploy workflows (`deploy-ec2.yml` and `deploy.yml`) so deploy fails before rollout on invalid migration history
+- Commit 43417b0 was initially pushed but the CI guard correctly rejected it (detected V10→V14 rename)
+- Commit d580236 (`[flyway-repair]` prefix) corrected the migration folder: restored `V10__room_read_tracking.sql`, removed the bad `V14__room_read_tracking.sql` (V14 was already repaired away in production DB by BUG-031), and passed CI
 
 **Files Changed:**  
 - `.gitattributes`  
 - `.github/scripts/check_flyway_migrations.sh`  
 - `.github/workflows/deploy-ec2.yml`  
 - `.github/workflows/deploy.yml`  
-- `backend/src/main/resources/db/migration/V10__room_read_tracking.sql`  
-- `docs/project-docs/claude.md`
+- `backend/src/main/resources/db/migration/V10__room_read_tracking.sql` *(restored)*  
+- `docs/project-docs/claude.md`  
+- `docs/project-docs/BUG_TRACKER.md`
 
 ---
 

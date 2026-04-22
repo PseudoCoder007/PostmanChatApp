@@ -192,7 +192,7 @@ Events broadcast on `/topic/rooms.{roomId}` (type field on `WsMessagePayload`):
 - `backend/src/main/java/com/postmanchat/repo/`
   - JPA repositories for the domain model
 - `backend/src/main/resources/db/migration/`
-  - Flyway history — next number is `V12`
+  - Flyway history — next number is `V17`
   - Migration themes so far:
     - V1: initial schema
     - V2: social foundation (friendships, CHECK constraint on status)
@@ -205,6 +205,11 @@ Events broadcast on `/topic/rooms.{roomId}` (type field on `WsMessagePayload`):
     - V9: room visibility and join requests
     - V10: room read tracking (`last_read_at` on `room_members`)
     - V11: friendship blocking (expands CHECK constraint to include `blocked`)
+    - V12: room mute toggle per member
+    - V13: message reactions (emoji toggle, persisted per message)
+    - V14: *(repaired away — orphaned duplicate of V10; marked deleted in schema history via `flyway:repair`)*
+    - V15: pinned messages per room
+    - V16: daily message digest
 
 ## Config And Deployment
 
