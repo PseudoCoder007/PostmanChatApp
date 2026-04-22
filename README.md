@@ -9,12 +9,18 @@ PostmanChat is a full-stack realtime messaging platform built with React, Spring
 ### v2.2.0 — Chat Engagement & Collaboration Update
 
 **Phase 1 Features - All 6 Implemented:**
-- Reactions: Users can react to messages with 6 quick emoji reactions (👍 ❤️ 😂 😮 😢 🔥); reactions are togglable and update in real-time across all users
-- Mentions & Notifications: Tag users with @mention syntax for autocomplete; mentioned users receive notifications; @mentions bypass room mute
-- Pinned Messages: Admin/owner can pin up to 5 important messages to room header; collapsible pinned banner with modal to view all pins
-- Room Mute: Users can mute rooms to stop notifications (except @mentions which bypass mute); preference persists across sessions
-- Draft Persistence: Auto-save message drafts per room in browser localStorage; drafts restore when switching back to room; cleared after send
-- Message Search v1: Search within room messages (2+ character minimum, capped at 50 results); uses ILIKE for case-insensitive search with 30-second result caching
+
+- **Reactions** — Hover over any message to see 6 quick emoji options: 👍 ❤️ 😂 😮 😢 🔥. Tap to react, tap again to remove. Reactions update live for every person in the room — no refresh needed. You can see exactly who reacted with what.
+
+- **@Mentions** — Type `@` followed by a name to tag someone in a group room. A dropdown shows matching members and you can pick the right person. The tagged user gets a notification immediately. Critically, **@mention notifications arrive even if the person has muted the room** — urgent pings are never missed.
+
+- **Pinned Messages** — Room admins and owners can pin up to 5 messages to the top of the room. A collapsible banner at the top of the chat always shows what has been pinned. Tap the banner to see all pinned messages in a modal. Important information — exam dates, decisions, announcements — never gets buried.
+
+- **Room Mute** — Mute any room to stop notification noise. Regular message notifications are silenced, but **@mention notifications still come through**. Perfect for staying in a large community room without being interrupted every few minutes. Preference is saved and persists across logouts.
+
+- **Draft Persistence** — Start typing a message in one room, switch to another conversation, and the draft is saved automatically. A "Draft" badge appears on the room in the sidebar as a reminder. The draft restores exactly where you left off when you return. It clears after you send.
+
+- **Message Search v1** — Search inside any room's message history. Type at least 2 characters and the app returns up to 50 matching results. Search is case-insensitive (finds "Meeting" and "meeting" equally). Results are cached for 30 seconds so repeated searches feel instant. Scoped to the current room.
 
 **Plus 34 critical bug fixes** including the workspace black-screen/render crash fixes, Flyway V10 checksum fix, browser notifications fix, message pagination fix, and mobile sign-out accessibility
 
@@ -24,13 +30,19 @@ Version markers:
 
 ### v2.1.0 — Chat UX & Safety Update
 
-- Two-tab chat layout: DMs and Groups are separated into distinct tabs with room-count badges
-- DM ⋮ settings menu: View Profile modal, Unfriend, and Block directly from a conversation
-- Seen / Sent read receipts: WhatsApp-style ✓ / ✓✓ tick marks on own DM messages
-- Block system: blocked users cannot message each other; they are hidden from People search; unblock available from the People tab
-- Peer profile modal: click "View Profile" in the DM menu to see avatar, level, XP, coins, and online status without leaving the chat
-- Hamburger menu is now mobile-only (hidden at ≥769px)
-- Navbar search now functional — type to filter and jump to any workspace tab
+- **Two-tab chat layout** — DMs and Group rooms are split into their own tabs, each showing an unread message badge. No more scrolling through one mixed list to find the right conversation.
+
+- **DM settings menu (⋮)** — A three-dot menu inside every DM gives you three quick actions: **View Profile** (see the person's avatar, level, XP, coins, and online status without leaving chat), **Unfriend**, and **Block** — all without navigating away.
+
+- **Read receipts (✓ / ✓✓)** — WhatsApp-style tick marks on every DM message you send. One tick (✓) means delivered. Two ticks (✓✓) means the other person has opened and read the message. Removes the guesswork of whether someone is ignoring you or just hasn't seen it yet.
+
+- **Block system** — Block any user with one tap and they immediately cannot send you messages, cannot see you in search results, and you cannot see them either. Unblock anytime from the People tab. Safety is built into the product, not hidden in settings.
+
+- **Peer profile modal** — Tap "View Profile" from a DM to see a clean profile card: the person's photo, current level, XP earned, coin balance, and live online status. Makes the social identity layer feel real.
+
+- **Hamburger menu is now mobile-only** — On desktop the sidebar is always visible; the hamburger toggle appears only on small screens. Cleaner on every viewport.
+
+- **Navbar search** — Type any word into the top bar to jump to any tab or feature instantly. Search "quests" and land on the Quests tab. Search a friend's name and see their profile. Makes the app fast and intuitive even for first-time users.
 
 ### v2.0.0 — UI Refresh
 
@@ -60,6 +72,30 @@ Version markers in this repo:
 - Igris AI assistant chat and history
 - Functional navbar search — jump to any workspace tab by name or keyword
 - Theme, sound, onboarding, and feedback flows
+
+## Real-World Use Cases
+
+These scenarios show where Postman Quest Chat makes a difference — and why other apps cannot replace it.
+
+### 1. The College Study Squad
+Four students create a private group room for finals prep. They pin the exam schedule and key formulas at the top — permanently visible, never buried. During crunch week everyone mutes the room to avoid constant interruptions, but @mentions still come through when someone needs urgent help at midnight. Reactions (👍) replace the "thanks, got it" messages so the chat stays clean. Message search finds "the formula from Tuesday" in under 3 seconds. Completing quests together makes revision sessions unexpectedly fun.
+
+### 2. Long-Distance Friends Staying Close
+Six friends in different cities find their group chat going quiet. Read receipts remove the anxiety of not knowing if a message was seen or ignored. Draft persistence saves long heartfelt messages when life interrupts mid-type. Reactions keep conversations alive even on low-energy days. Igris generates reconnection quests — "Message a friend you haven't spoken to in 2 weeks" — nudging people to reach out. The leaderboard gives everyone a reason to open the app daily, not just for emergencies.
+
+### 3. The Gaming Clan
+A 30-player gaming group creates a public room for recruitment and a private join-request room for the core team. The leaderboard rewards the most active members with visible rank. Quests challenge members to hit engagement milestones. Pinned messages keep the next tournament date visible to everyone. @mentions replace the chaos of pinging someone in a busy room — targeted, immediate, guaranteed to land.
+
+### 4. The Small Startup Team
+A 5-person team replaces their paid Slack subscription with group rooms per project. @mentions target the right person instead of notifying the whole team. Pinned messages lock down important decisions so they are never re-litigated. File attachments handle mockups and documents inline. Room mute enables focus mode. Message search retrieves any past decision in seconds. The quest system adds a light layer of team culture and motivation.
+
+### 5. The Mental Wellness Support Circle
+Five close friends create a private room as a safe, judgment-free space. When someone is struggling at 2am, Igris is always available — listening, responding with empathy, and suggesting small actionable quests (go outside for 5 minutes, write down one good thing). Read receipts provide the comfort of knowing a message was seen. Reactions let the others acknowledge a difficult post without needing to find the right words. The quest system rewards completing wellness nudges with XP — positive reinforcement that feels rewarding, not clinical.
+
+### 6. The University Society
+An 80-member debate society creates a public room for general membership and a private room for the committee. Pinned messages always show the next event, sign-up link, and latest newsletter — no member can claim they missed the announcement. @mentions alert the right people without spamming everyone. The leaderboard rewards engagement and turns up in conversation. Quests tied to attendance and participation make showing up feel like progress. New members use Igris to get oriented without bothering committee members.
+
+---
 
 ## Tech Stack
 
