@@ -3596,8 +3596,13 @@ body::before {
     padding: 0;
   }
 
-  /* Chat header — single row, truncate room name */
+  /* Chat header — fixed directly below the topbar, always visible */
   .pm-msg-area__header {
+    position: fixed;
+    top: var(--pm-topbar-h);
+    left: 0;
+    right: 0;
+    z-index: 35;
     padding: 10px 14px;
     gap: 8px;
     flex-wrap: nowrap;
@@ -3605,7 +3610,11 @@ body::before {
     border-bottom: 1px solid var(--pm-accent);
   }
 
+  /* Offset messages below the fixed header (~48px header + a little buffer) */
+  .pm-msg-stream { padding-top: 52px; }
+
   .pm-topbar__search { display: none; }
+  .pm-topbar__spacer { flex: 1; }
   .pm-msg-area__room-meta-wrap {
     flex: 1;
     min-width: 0;
@@ -3683,7 +3692,7 @@ body::before {
   .pm-view-title { font-size: 18px; }
   .pm-topbar .pm-stat-chip { display: flex; padding: 4px 8px; font-size: 11px; gap: 4px; }
   .pm-topbar .pm-stat-chip span { display: none; }
-  .pm-topbar__spacer { display: none; }
+  .pm-topbar__spacer { flex: 1; }
   .lv-stats-grid { grid-template-columns: repeat(3, 1fr); }
   .lv-intel-grid { grid-template-columns: 1fr 1fr; }
   .lv-hero__top { flex-wrap: wrap; gap: 10px; }
