@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Hash, Plus, Search, Send, Paperclip, X,
-  Lock, Globe, ChevronDown, ChevronUp, UserPlus, Check, MoreVertical, Bell, BellOff, Smile, Pin, Menu, Mic, Square
+  Lock, Globe, MessageCircle, UserPlus, Check, MoreVertical, Bell, BellOff, Smile, Pin, Menu, Mic, Square
 } from 'lucide-react';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { resolveAttachmentUrl } from '@/lib/api';
@@ -110,6 +110,7 @@ interface ChatViewProps {
   onReportMessage?: (messageId: string, reason: string, notes: string) => void;
   streakDays?: number;
   awayMessageCount?: number;
+  onAddDm?: () => void;
 }
 
 function AttachmentPreview({ attachment }: { attachment: Attachment }) {
@@ -128,6 +129,93 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
   );
 }
 
+function CreateRoomModal({
+  groupName, setGroupName, groupVisibility, setGroupVisibility,
+  onCreateRoom, createRoomPending, onClose,
+}: {
+  groupName: string;
+  setGroupName: (v: string) => void;
+  groupVisibility: RoomVisibility;
+  setGroupVisibility: (v: RoomVisibility) => void;
+  onCreateRoom: () => void;
+  createRoomPending: boolean;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div className="pm-modal-backdrop" onClick={onClose}>
+      <div
+        className="pm-modal pm-create-room-modal"
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-room-title"
+      >
+        <button className="pm-icon-btn pm-modal__close" onClick={onClose} title="Cancel" style={{ border: 'none' }}>
+          <X size={16} />
+        </button>
+        <h2 id="create-room-title" className="pm-create-room-modal__title">Create a Group</h2>
+        <p className="pm-create-room-modal__sub">A shared space where multiple people can chat together.</p>
+        <div className="pm-create-room-modal__field">
+          <label htmlFor="new-room-name" className="pm-create-room-modal__label">Group Name</label>
+          <input
+            id="new-room-name"
+            className="pm-input"
+            placeholder="e.g. design-team, weekend-plans..."
+            value={groupName}
+            onChange={e => setGroupName(e.target.value)}
+            autoFocus
+            maxLength={60}
+          />
+        </div>
+        <div className="pm-create-room-modal__field">
+          <label className="pm-create-room-modal__label">Visibility</label>
+          <div className="pm-create-room-modal__vis-options">
+            {(['public_room', 'private_room'] as RoomVisibility[]).map(vis => (
+              <label key={vis} className={`pm-vis-option${groupVisibility === vis ? ' pm-vis-option--active' : ''}`}>
+                <input
+                  type="radio"
+                  name="visibility"
+                  value={vis}
+                  checked={groupVisibility === vis}
+                  onChange={() => setGroupVisibility(vis)}
+                  style={{ display: 'none' }}
+                />
+                {vis === 'public_room' ? <Globe size={16} /> : <Lock size={16} />}
+                <span>
+                  <strong>{vis === 'public_room' ? 'Public' : 'Private'}</strong>
+                  <span className="pm-vis-option__desc">
+                    {vis === 'public_room' ? 'Anyone can discover and join' : 'Invite-only, hidden from discover'}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="pm-create-room-modal__actions">
+          <button className="pm-btn pm-btn--ghost" onClick={onClose} disabled={createRoomPending}>
+            Cancel
+          </button>
+          <button
+            className="pm-btn pm-btn--primary"
+            onClick={() => { onCreateRoom(); onClose(); }}
+            disabled={createRoomPending || !groupName.trim()}
+          >
+            {createRoomPending
+              ? <span className="pm-spinner" style={{ width: 15, height: 15 }} />
+              : 'Create Group'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatView({
   visibleRooms, discoverableRooms, activeRoomId, setActiveRoomId,
   roomSearch, setRoomSearch, orderedMessages, me, activeRoom,
@@ -142,11 +230,10 @@ export default function ChatView({
   mentionCandidates = [], pins = [], onPinMessage, onUnpinMessage, onSearchOpen,
   onLoadMore, hasMoreMessages, loadingMoreMessages,
   onSendVoice, voicePending,
-  onForwardMessage, onReportMessage, streakDays, awayMessageCount,
+  onForwardMessage, onReportMessage, streakDays, awayMessageCount, onAddDm,
 }: ChatViewProps) {
   const { isRecording, elapsedSeconds, startRecording, stopRecording, cancelRecording } = useVoiceRecorder();
-  const [showNewRoom, setShowNewRoom] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dm' | 'group'>('dm');
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showDmMenu, setShowDmMenu] = useState(false);
   const [activePickerMsgId, setActivePickerMsgId] = useState<string | null>(null);
   const [activeMenuMsgId, setActiveMenuMsgId] = useState<string | null>(null);
@@ -167,11 +254,8 @@ export default function ChatView({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [orderedMessages.length]);
 
-  // Auto-switch tab when active room changes externally (e.g. from People view)
   useEffect(() => {
     if (!activeRoom) return;
-    if (activeRoom.type === 'direct' && activeTab !== 'dm') setActiveTab('dm');
-    if (activeRoom.type === 'group' && activeTab !== 'group') setActiveTab('group');
     setMobileShowRooms(false);
     setAwayBannerDismissed(false);
   }, [activeRoom?.id]);
@@ -207,13 +291,12 @@ export default function ChatView({
   }
 
   return (
+  <>
     <div className="pm-chat-layout">
       {/* Rooms Panel */}
       <div className={`pm-rooms-panel${mobileShowRooms ? ' pm-rooms-panel--mobile-open' : ''}`}>
         <div className="pm-rooms-panel__header">
-          <span className="pm-rooms-panel__title">
-            {activeTab === 'dm' ? 'Direct Messages' : 'Group Rooms'}
-          </span>
+          <span className="pm-rooms-panel__title">Messages</span>
           {activeRoomId && (
             <button
               className="pm-icon-btn pm-rooms-mobile-toggle"
@@ -226,31 +309,13 @@ export default function ChatView({
           )}
         </div>
 
-        {/* Tab switcher */}
-        <div className="pm-rooms-tabs">
-          <button
-            className={`pm-rooms-tab${activeTab === 'dm' ? ' active' : ''}`}
-            onClick={() => setActiveTab('dm')}
-          >
-            DMs
-            {dms.length > 0 && <span className="pm-rooms-tab__badge">{dms.length}</span>}
-          </button>
-          <button
-            className={`pm-rooms-tab${activeTab === 'group' ? ' active' : ''}`}
-            onClick={() => setActiveTab('group')}
-          >
-            Groups
-            {channels.length > 0 && <span className="pm-rooms-tab__badge">{channels.length}</span>}
-          </button>
-        </div>
-
         <div className="pm-rooms-panel__search">
           <div style={{ position: 'relative' }}>
             <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--pm-text-muted)' }} />
             <input
               className="pm-input pm-input--sm"
               style={{ paddingLeft: 30 }}
-              placeholder={activeTab === 'dm' ? 'Search DMs...' : 'Search rooms...'}
+              placeholder="Search conversations..."
               value={roomSearch}
               onChange={e => setRoomSearch(e.target.value)}
             />
@@ -258,168 +323,142 @@ export default function ChatView({
         </div>
 
         <div className="pm-rooms-panel__list">
-          {/* DMs tab */}
-          {activeTab === 'dm' && (
-            <>
-              {dms.length === 0 && (
-                <div className="pm-empty">
-                  <span className="pm-empty__icon">💬</span>
-                  <div className="pm-empty__title">No direct messages</div>
-                  <div className="pm-empty__sub">Message a friend from the People tab</div>
-                </div>
-              )}
-              {dms.map(room => {
-                const hasDraft = hasSavedDraft(room.id, activeRoomId);
-                const isActive = room.lastMessageAt && Date.now() - new Date(room.lastMessageAt).getTime() < 86_400_000;
-                return (
-                  <div
-                    key={room.id}
-                    className={`pm-room-item${activeRoomId === room.id ? ' active' : ''}`}
-                    onClick={() => { setActiveRoomId(room.id); setMobileShowRooms(false); }}
-                  >
-                    <div className="pm-avatar pm-avatar--sm" style={{ flexShrink: 0 }}>
-                      {room.directPeer?.avatarUrl
-                        ? <img src={room.directPeer.avatarUrl} alt={room.directPeer.displayName} />
-                        : initials(room.directPeer?.displayName ?? '?')}
-                    </div>
-                    <div className="pm-room-item__info">
-                      <div className="pm-room-item__name">
-                        {getRoomTitle(room)}
-                        {isActive && <span className="pm-active-badge">Active</span>}
-                      </div>
-                      <div className="pm-room-item__preview">
-                        {hasDraft
-                          ? <span style={{ color: 'var(--pm-text-muted)', fontStyle: 'italic' }}>Draft</span>
-                          : room.directPeer?.active
-                            ? <span style={{ color: 'var(--pm-online)' }}>● Online</span>
-                            : 'Offline'}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </>
-          )}
-
-          {/* Groups tab */}
-          {activeTab === 'group' && (
-            <>
-              {channels.length === 0 && discoverableRooms.length === 0 && !roomSearch && (
-                <div className="pm-empty">
-                  <span className="pm-empty__icon">🏠</span>
-                  <div className="pm-empty__title">No group rooms yet</div>
-                  <div className="pm-empty__sub">Create one below!</div>
-                </div>
-              )}
-              {channels.length > 0 && (
-                <>
-                  <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 700, color: 'var(--pm-text-muted)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    My Rooms
-                  </div>
-                  {channels.map(room => {
-                    const hasDraft = hasSavedDraft(room.id, activeRoomId);
-                    const isActive = room.lastMessageAt && Date.now() - new Date(room.lastMessageAt).getTime() < 86_400_000;
-                    return (
-                      <div
-                        key={room.id}
-                        className={`pm-room-item${activeRoomId === room.id ? ' active' : ''}`}
-                        onClick={() => { setActiveRoomId(room.id); setMobileShowRooms(false); }}
-                      >
-                        <div className="pm-room-item__icon">
-                          {room.visibility === 'private_room' ? <Lock size={12} /> : <Hash size={12} />}
-                        </div>
-                        <div className="pm-room-item__info">
-                          <div className="pm-room-item__name">
-                            {room.name}
-                            {isActive && <span className="pm-active-badge">Active</span>}
-                          </div>
-                          <div className="pm-room-item__preview">
-                            {hasDraft
-                              ? <span style={{ color: 'var(--pm-text-muted)', fontStyle: 'italic' }}>Draft</span>
-                              : `${room.memberCount} members`}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
-              {discoverableRooms.length > 0 && (
-                <>
-                  <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 700, color: 'var(--pm-text-muted)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
-                    Discover
-                  </div>
-                  {discoverableRooms.map(room => (
-                    <div key={room.id} className="pm-room-item">
-                      <div className="pm-room-item__icon"><Globe size={12} /></div>
-                      <div className="pm-room-item__info">
-                        <div className="pm-room-item__name">{room.name}</div>
-                        <div className="pm-room-item__preview">{room.memberCount} members</div>
-                      </div>
-                      <button
-                        className="pm-btn pm-btn--sm pm-btn--primary"
-                        onClick={() => onJoinRoom(room.id)}
-                        disabled={joinPending}
-                      >
-                        Join
-                      </button>
-                    </div>
-                  ))}
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* New Room button — only in Groups tab */}
-        {activeTab === 'group' && (
-          <>
-            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--pm-border)' }}>
+          {/* Direct Messages section */}
+          <div className="pm-panel-section">
+            <div className="pm-panel-section__header">
+              <span className="pm-panel-section__label">
+                <MessageCircle size={12} /> Direct Messages
+              </span>
               <button
-                className="pm-btn pm-btn--ghost pm-btn--sm pm-btn--full"
-                onClick={() => setShowNewRoom(v => !v)}
-                style={{ justifyContent: 'space-between' }}
+                className="pm-icon-btn pm-icon-btn--xs"
+                title="New Direct Message"
+                onClick={onAddDm}
+                style={{ border: 'none', background: 'none' }}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Plus size={13} /> New Room
-                </span>
-                {showNewRoom ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                <UserPlus size={13} />
               </button>
             </div>
-
-            {showNewRoom && (
-              <div className="pm-new-room-form">
-                <input
-                  className="pm-input pm-input--sm"
-                  placeholder="Room name..."
-                  value={groupName}
-                  onChange={e => setGroupName(e.target.value)}
-                />
-                <div className="pm-row">
-                  <button
-                    className={`pm-btn pm-btn--sm${groupVisibility === 'public_room' ? ' pm-btn--primary' : ' pm-btn--ghost'}`}
-                    onClick={() => setGroupVisibility('public_room')}
-                  >
-                    <Globe size={12} /> Public
-                  </button>
-                  <button
-                    className={`pm-btn pm-btn--sm${groupVisibility === 'private_room' ? ' pm-btn--primary' : ' pm-btn--ghost'}`}
-                    onClick={() => setGroupVisibility('private_room')}
-                  >
-                    <Lock size={12} /> Private
-                  </button>
-                </div>
-                <button
-                  className="pm-btn pm-btn--primary pm-btn--sm pm-btn--full"
-                  onClick={onCreateRoom}
-                  disabled={createRoomPending || !groupName.trim()}
-                >
-                  {createRoomPending ? <span className="pm-spinner" style={{ width: 13, height: 13 }} /> : 'Create Room'}
-                </button>
+            {dms.length === 0 && (
+              <div className="pm-empty">
+                <span className="pm-empty__icon">💬</span>
+                <div className="pm-empty__title">No direct messages</div>
+                <div className="pm-empty__sub">Tap + to message a friend</div>
               </div>
             )}
-          </>
-        )}
+            {dms.map(room => {
+              const hasDraft = hasSavedDraft(room.id, activeRoomId);
+              const isActive = room.lastMessageAt && Date.now() - new Date(room.lastMessageAt).getTime() < 86_400_000;
+              return (
+                <div
+                  key={room.id}
+                  className={`pm-room-item${activeRoomId === room.id ? ' active' : ''}`}
+                  onClick={() => { setActiveRoomId(room.id); setMobileShowRooms(false); }}
+                >
+                  <div className="pm-avatar pm-avatar--sm" style={{ flexShrink: 0 }}>
+                    {room.directPeer?.avatarUrl
+                      ? <img src={room.directPeer.avatarUrl} alt={room.directPeer.displayName} />
+                      : initials(room.directPeer?.displayName ?? '?')}
+                  </div>
+                  <div className="pm-room-item__info">
+                    <div className="pm-room-item__name">
+                      {getRoomTitle(room)}
+                      {isActive && <span className="pm-active-badge">Active</span>}
+                    </div>
+                    <div className="pm-room-item__preview">
+                      {hasDraft
+                        ? <span style={{ color: 'var(--pm-text-muted)', fontStyle: 'italic' }}>Draft</span>
+                        : room.directPeer?.active
+                          ? <span style={{ color: 'var(--pm-online)' }}>● Online</span>
+                          : 'Offline'}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pm-panel-divider" />
+
+          {/* Groups section */}
+          <div className="pm-panel-section">
+            <div className="pm-panel-section__header">
+              <span className="pm-panel-section__label">
+                <Hash size={12} /> Groups
+              </span>
+              <button
+                className="pm-icon-btn pm-icon-btn--xs"
+                title="Create Group"
+                onClick={() => setShowCreateRoomModal(true)}
+                style={{ border: 'none', background: 'none' }}
+              >
+                <Plus size={13} />
+              </button>
+            </div>
+            {channels.length === 0 && discoverableRooms.length === 0 && !roomSearch && (
+              <div className="pm-empty">
+                <span className="pm-empty__icon">🏠</span>
+                <div className="pm-empty__title">No group rooms yet</div>
+                <div className="pm-empty__sub">Tap + to create one!</div>
+              </div>
+            )}
+            {channels.length > 0 && (
+              <>
+                <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 700, color: 'var(--pm-text-muted)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                  My Rooms
+                </div>
+                {channels.map(room => {
+                  const hasDraft = hasSavedDraft(room.id, activeRoomId);
+                  const isActive = room.lastMessageAt && Date.now() - new Date(room.lastMessageAt).getTime() < 86_400_000;
+                  return (
+                    <div
+                      key={room.id}
+                      className={`pm-room-item${activeRoomId === room.id ? ' active' : ''}`}
+                      onClick={() => { setActiveRoomId(room.id); setMobileShowRooms(false); }}
+                    >
+                      <div className="pm-room-item__icon">
+                        {room.visibility === 'private_room' ? <Lock size={12} /> : <Hash size={12} />}
+                      </div>
+                      <div className="pm-room-item__info">
+                        <div className="pm-room-item__name">
+                          {room.name}
+                          {isActive && <span className="pm-active-badge">Active</span>}
+                        </div>
+                        <div className="pm-room-item__preview">
+                          {hasDraft
+                            ? <span style={{ color: 'var(--pm-text-muted)', fontStyle: 'italic' }}>Draft</span>
+                            : `${room.memberCount} members`}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+            {discoverableRooms.length > 0 && (
+              <>
+                <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 700, color: 'var(--pm-text-muted)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                  Discover
+                </div>
+                {discoverableRooms.map(room => (
+                  <div key={room.id} className="pm-room-item">
+                    <div className="pm-room-item__icon"><Globe size={12} /></div>
+                    <div className="pm-room-item__info">
+                      <div className="pm-room-item__name">{room.name}</div>
+                      <div className="pm-room-item__preview">{room.memberCount} members</div>
+                    </div>
+                    <button
+                      className="pm-btn pm-btn--sm pm-btn--primary"
+                      onClick={() => onJoinRoom(room.id)}
+                      disabled={joinPending}
+                    >
+                      Join
+                    </button>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Message Area */}
@@ -995,5 +1034,17 @@ export default function ChatView({
         </div>
       )}
     </div>
+    {showCreateRoomModal && (
+      <CreateRoomModal
+        groupName={groupName}
+        setGroupName={setGroupName}
+        groupVisibility={groupVisibility}
+        setGroupVisibility={setGroupVisibility}
+        onCreateRoom={onCreateRoom}
+        createRoomPending={createRoomPending}
+        onClose={() => { setShowCreateRoomModal(false); setGroupName(''); }}
+      />
+    )}
+  </>
   );
 }

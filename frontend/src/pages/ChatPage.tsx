@@ -972,6 +972,7 @@ export default function ChatPage() {
               onReportMessage={(messageId, reason, notes) => void submitReport.mutateAsync({ messageId, reason, notes })}
               streakDays={streak?.days}
               awayMessageCount={awayMessageCount}
+              onAddDm={() => setActiveView('people')}
             />
           )}
 
