@@ -2,8 +2,8 @@
 
 **Format version:** 1.0  
 **Last updated:** 2026-04-23  
-**Total bugs logged:** 36  
-**Fixed:** 36 | **Open:** 0 | **Won't Fix:** 0
+**Total bugs logged:** 37  
+**Fixed:** 37 | **Open:** 0 | **Won't Fix:** 0
 
 ---
 
@@ -11,6 +11,7 @@
 
 | ID | Title | Severity | Area | Status |
 |----|-------|----------|------|--------|
+| [BUG-037](#bug-037) | Chat tab entirely invisible on mobile — height collapse makes content unreachable | High | Mobile / CSS | Fixed |
 | [BUG-036](#bug-036) | Reactions allow one user to stack multiple different emojis on the same message | Medium | Backend / Chat | Fixed |
 | [BUG-035](#bug-035) | Mobile chat room switcher is cramped and DM/Group tabs disappear from reach on narrow screens | High | Mobile / Chat | Fixed |
 | [BUG-034](#bug-034) | Authenticated workspace crashes on render with `Cannot access 'activeRoom' before initialization` | Critical | Frontend / Runtime | Fixed |
@@ -51,6 +52,52 @@
 ---
 
 ## Detailed Entries
+
+---
+
+### BUG-037
+
+**Title:** Chat tab entirely invisible on mobile — height collapse makes content unreachable  
+**Severity:** High  
+**Priority:** P1  
+**Status:** Fixed  
+**Category:** Mobile / CSS  
+**Reported:** 2026-04-23  
+**Fixed:** 2026-04-23  
+
+**Description:**  
+On mobile devices the entire chat tab was invisible. Opening the Chat tab showed a blank area. When a room was selected, the message area header (room name, user name, action buttons) was hidden. The "Direct Messages" / "Group Rooms" panel heading disappeared when the rooms panel closed. On very small screens the group invite input overflowed the header, pushing other elements off-screen.
+
+**Steps to Reproduce:**  
+1. Open the app on a mobile device (or DevTools device emulation, e.g. iPhone 375px)  
+2. Tap the Chat tab  
+3. Chat area is blank — no rooms panel, no message area
+
+**Expected Behavior:** Chat layout fills the viewport between the topbar and bottom nav; rooms panel and message area are fully visible and interactive.  
+**Actual Behavior:** Blank / collapsed chat area; header content hidden or overflowing.
+
+**Root Cause:**  
+Four compounding issues:
+
+1. **Height collapse (main bug):** `.pm-app` used `min-height: 100vh` (not `height`). On desktop the sidebar enforces the grid row height to 100vh. On mobile the sidebar is `position: fixed` and leaves the grid flow, so the single remaining grid child — `.pm-content--chat` — has `overflow: hidden`, creating a circular size dependency where nothing has a definite height and the entire chat area collapses to 0.
+
+2. **Header overflow:** The group-owner invite input (`width: 160px`) inside `.pm-msg-area__header-actions` overflowed on narrow screens, pushing room name and action buttons off-screen.
+
+3. **Room name wrapped off-screen:** The existing `≤640px` rule applied `order: 2; flex-basis: 100%` to `.pm-msg-area__room-meta-wrap`, pushing the room name below the action buttons. Combined with the collapsed container height, the second row was invisible.
+
+4. **No chat-type context in message view:** `.pm-rooms-panel` is correctly hidden on mobile when a room is selected, but users had no indicator of whether they were in a DM or group chat while the rooms panel was closed.
+
+**Fix Applied:**  
+- Added `height: 100vh; overflow: hidden` to `.pm-app` inside `@media (max-width: 960px)` so the grid has a definite size on mobile  
+- Added `flex: 1; min-height: 0` to `.pm-content--chat` in the same block to complete the height chain  
+- Replaced broken `≤640px` header wrap rules with a proper `≤960px` single-row layout (`flex-wrap: nowrap`, `min-width: 0` on room meta for text truncation, `flex-shrink: 0` on actions)  
+- Moved the two-row wrap to `≤400px` only (truly tiny screens)  
+- Wrapped the invite block in `<div className="pm-invite-wrap">` and added `.pm-invite-wrap { display: none }` on mobile  
+- Added `<span className="pm-room-type-chip">DM / Group</span>` next to the room name in `ChatView.tsx`; chip is hidden on desktop via base CSS and shown as a pill badge on mobile (≤960px)
+
+**Files Changed:**  
+- `frontend/src/index.css`  
+- `frontend/src/components/views/ChatView.tsx`
 
 ---
 

@@ -1165,6 +1165,9 @@ body::before {
   text-overflow: ellipsis;
 }
 
+/* Context chip hidden on desktop, shown on mobile via media query */
+.pm-room-type-chip { display: none; }
+
 .pm-msg-area__header-actions {
   margin-left: auto;
   display: flex;
@@ -3400,6 +3403,8 @@ body::before {
 
   .pm-app {
     grid-template-columns: 1fr;
+    height: 100vh;
+    overflow: hidden;
   }
 
   .pm-sidebar {
@@ -3428,6 +3433,8 @@ body::before {
   .pm-content--chat {
     padding-top: var(--pm-topbar-h);
     padding-bottom: 64px;
+    flex: 1;
+    min-height: 0;
   }
 
   /* Auth pages: show only form */
@@ -3569,6 +3576,38 @@ body::before {
     border: none;
     padding: 0;
   }
+
+  /* Chat header — single row, truncate room name */
+  .pm-msg-area__header {
+    padding: 10px 14px;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .pm-msg-area__room-meta-wrap {
+    flex: 1;
+    min-width: 0;
+  }
+  .pm-msg-area__header-actions {
+    flex-shrink: 0;
+    gap: 4px;
+  }
+
+  /* Hide invite input on mobile — only accessible on desktop */
+  .pm-invite-wrap { display: none; }
+
+  /* DM/Group context chip — show on mobile only */
+  .pm-room-type-chip {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--pm-bg-card);
+    color: var(--pm-text-muted);
+    border: 1px solid var(--pm-border);
+    margin-left: 4px;
+    vertical-align: middle;
+  }
 }
 
 @media (max-width: 640px) {
@@ -3589,21 +3628,15 @@ body::before {
   .ft-inner { padding: 28px 0 20px; gap: 24px; }
   .ft-bottom { font-size: 10px; gap: 6px; }
   .pm-auth-card__icon-wrap { width: 40px; height: 40px; }
-  .pm-msg-area__header {
-    padding: 12px;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-  .pm-msg-area__room-meta-wrap {
-    order: 2;
-    flex-basis: 100%;
-  }
-  .pm-msg-area__header-actions {
-    margin-left: 0;
-  }
   .pm-rooms-mobile-toggle {
     min-width: fit-content;
   }
+}
+
+/* Very small screens — wrap room meta to second row */
+@media (max-width: 400px) {
+  .pm-msg-area__header { flex-wrap: wrap; }
+  .pm-msg-area__room-meta-wrap { order: 2; flex-basis: 100%; }
 }
 
 /* Tablet adjustments */

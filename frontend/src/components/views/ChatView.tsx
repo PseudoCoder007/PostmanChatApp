@@ -441,6 +441,9 @@ export default function ChatView({
               <div className="pm-msg-area__room-meta-wrap">
                 <div className="pm-msg-area__room-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {getRoomTitle(activeRoom)}
+                  <span className="pm-room-type-chip">
+                    {activeRoom.type === 'direct' ? 'DM' : 'Group'}
+                  </span>
                   {activeRoom.type === 'direct' && streakDays !== undefined && streakDays >= 3 && (
                     <span title={`${streakDays}-day streak!`} style={{ fontSize: 15 }}>🔥</span>
                   )}
@@ -527,9 +530,9 @@ export default function ChatView({
                   </div>
                 )}
 
-                {/* Invite for group owners only */}
+                {/* Invite for group owners only — hidden on mobile via .pm-invite-wrap */}
                 {activeRoom.currentUserRole === 'owner' && activeRoom.type === 'group' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="pm-invite-wrap" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <input
                       className="pm-input pm-input--sm"
                       style={{ width: 160 }}
