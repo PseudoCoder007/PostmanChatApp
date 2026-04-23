@@ -3601,7 +3601,11 @@ body::before {
     padding: 10px 14px;
     gap: 8px;
     flex-wrap: nowrap;
+    background: var(--pm-bg-elevated);
+    border-bottom: 1px solid var(--pm-accent);
   }
+
+  .pm-topbar__search { display: none; }
   .pm-msg-area__room-meta-wrap {
     flex: 1;
     min-width: 0;

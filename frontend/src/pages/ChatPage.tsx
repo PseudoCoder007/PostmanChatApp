@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Brain, MessageCircle, Users, Target, Trophy, User, Settings2, Bell, RefreshCcw, TriangleAlert } from 'lucide-react';
+import { Brain, MessageCircle, Users, Target, Trophy, User, Settings2, RefreshCcw, TriangleAlert } from 'lucide-react';
 import { useStompRoom } from '@/hooks/useStompRoom';
 import { apiFetch, apiFetchForm, resolveAttachmentUrl } from '@/lib/api';
 import { getUserFriendlyErrorMessage } from '@/lib/errorMessages';
@@ -1175,13 +1175,12 @@ export default function ChatPage() {
           { key: 'chat' as ViewKey, label: 'Chat', icon: <MessageCircle size={20} /> },
           { key: 'people' as ViewKey, label: 'People', icon: <Users size={20} /> },
           { key: 'quests' as ViewKey, label: 'Quests', icon: <Target size={20} /> },
-          { key: 'notifications' as ViewKey, label: 'Alerts', icon: <Bell size={20} /> },
           { key: 'profile' as ViewKey, label: 'Profile', icon: <User size={20} /> },
           { key: 'settings' as ViewKey, label: 'Settings', icon: <Settings2 size={20} /> },
         ].map(item => (
           <button
             key={item.key}
-            className={`pm-mobile-nav__btn${activeView === item.key ? ' active' : ''}${item.key === 'notifications' && unread.length > 0 ? ' pm-mobile-nav__btn--badge' : ''}`}
+            className={`pm-mobile-nav__btn${activeView === item.key ? ' active' : ''}`}
             onClick={() => setActiveView(item.key)}
           >
             {item.icon}
