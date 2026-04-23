@@ -3627,6 +3627,45 @@ body::before {
     margin-left: 4px;
     vertical-align: middle;
   }
+
+  /* Levels — vertical timeline on mobile */
+  .lv-timeline {
+    flex-direction: column;
+    overflow: visible;
+    padding: 0;
+    scroll-snap-type: none;
+    gap: 0;
+  }
+  .lv-tl-node {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 8px 0 16px 0;
+  }
+  .lv-tl-node:last-child { padding-bottom: 8px; }
+  .lv-tl-node:last-child .lv-tl-line { display: none; }
+  .lv-tl-line {
+    left: 13px;
+    top: 36px;
+    right: auto;
+    width: 2px;
+    height: 16px;
+  }
+  .lv-tl-label {
+    text-align: left;
+    max-width: none;
+    font-size: 13px;
+    margin-top: 0;
+    flex: 1;
+    white-space: normal;
+  }
+  .lv-xp-sub {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
 }
 
 @media (max-width: 640px) {
