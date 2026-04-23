@@ -19,7 +19,7 @@ export default function FeedbackView({ form, setForm, onSubmit, isPending }: Fee
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
+      <div className="pm-feedback-layout">
         <div className="pm-card">
           <div className="pm-card__title"><MessageSquare size={15} /> Send Feedback</div>
           <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

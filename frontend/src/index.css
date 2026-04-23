@@ -2784,6 +2784,14 @@ body::before {
   color: var(--pm-text-muted);
 }
 
+/* ── Feedback View ─────────────────────────────────────────── */
+.pm-feedback-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  align-items: start;
+}
+
 /* ── Footer (ft-*) ──────────────────────────────────────────── */
 .ft-root {
   margin-top: 56px;
@@ -3459,7 +3467,8 @@ body::before {
   .pm-igris-layout,
   .pm-board-layout,
   .pm-levels-layout,
-  .pm-people-layout {
+  .pm-people-layout,
+  .pm-feedback-layout {
     grid-template-columns: 1fr;
   }
 
@@ -3467,8 +3476,18 @@ body::before {
   .pm-grid-2 { grid-template-columns: 1fr; }
   .pm-grid-4 { grid-template-columns: 1fr 1fr; }
 
+  /* Switch to flex so .pm-msg-area can fill the remaining height via flex:1.
+     Grid auto rows don't inherit definite height from flex parents, causing
+     the message area to collapse to 0 on mobile. */
   .pm-chat-layout {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: unset;
+  }
+
+  .pm-msg-area {
+    flex: 1;
+    min-height: 0;
   }
 
   .pm-rooms-panel {
@@ -3622,8 +3641,12 @@ body::before {
   .pm-topbar .pm-stat-chip { display: flex; padding: 4px 8px; font-size: 11px; gap: 4px; }
   .pm-topbar .pm-stat-chip span { display: none; }
   .pm-topbar__spacer { display: none; }
-  .lv-stats-grid { grid-template-columns: 1fr 1fr; }
+  .lv-stats-grid { grid-template-columns: repeat(3, 1fr); }
   .lv-intel-grid { grid-template-columns: 1fr 1fr; }
+  .lv-hero__top { flex-wrap: wrap; gap: 10px; }
+  .lv-hero__rank { font-size: 20px; }
+  .lv-hero { padding: 18px; }
+  .pm-feedback-layout { grid-template-columns: 1fr; }
   .pm-card { padding: 14px; }
   .ft-inner { padding: 28px 0 20px; gap: 24px; }
   .ft-bottom { font-size: 10px; gap: 6px; }
